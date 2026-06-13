@@ -134,11 +134,34 @@ spike confirms and the live results.
 
 ## Build status
 
-**Phase 0 — scaffold + spikes: complete.** Monorepo wired (Bun workspaces, shared tsconfig +
-Biome), `@sidekick/shared` seeded with the five markets + pluggable oracle adapter + constants,
-Foundry set up, and **all three spikes passing live on Arc Testnet** (Arc deploy + USDC gas +
-WSS, on-chain oracle read via the adapter, and a Gateway unified-balance round-trip). Next:
-Phase 1 economic simulation to tune the funding/decrement constants.
+**Phases 0–3 complete. The Arc + Circle spine is live end-to-end.**
+
+- **Phase 0 — scaffold + spikes: ✅.** Monorepo wired; `@sidekick/shared` seeded with the five
+  markets + pluggable oracle adapter + constants; all three spikes pass live on Arc (deploy + USDC
+  gas + WSS, on-chain oracle read, Gateway unified-balance round-trip).
+- **Phase 1 — economic simulation: ✅.** `packages/engine/src/sim` (float) tunes + writes back the
+  swept constants `m=0.01, α=r_max, λ=0.08, r_max=0.0005, k=3`. `bun run sim`.
+- **Phase 2 — contracts: ✅ built, tested (72 Foundry tests), and DEPLOYED LIVE to Arc Testnet**
+  (chain 5042002). Real addresses are in `packages/shared/src/deployments.ts` (`isDeployed: true`):
+  Vault, MarketRegistry, PerpEngine, AccountManager + a Pool/slpUSDC/StorkAdapter per market.
+  Collateral is the **canonical Arc testnet USDC** `0x3600000000000000000000000000000000000000` (6dp,
+  also the gas token). The full open→checkpoint→close loop is verified on-chain.
+- **Phase 3 — off-chain engine (Layers A+B): ✅ live.** `packages/engine` runs as a Hono service
+  (`bun run dev`) that loops per Arc block: reads the mark (live Stork for BTC; deterministic
+  synthetic fallback for the assets Stork hasn't pushed on testnet — ETH/SOL/HYPE/LINK), runs the
+  §4.3 reconciliation in **fixed point** (bit-for-bit parity with the on-chain Solidity — see
+  `packages/engine/src/fixed`), triggers the on-chain `checkpoint`, settles Layer B margin-call
+  **nanopayments** via the x402 seller endpoint, and streams per-block state over WebSocket. 84
+  engine tests + 72 contract tests green. See `packages/engine/README.md` for the full surface
+  and the live scripts (`bun run live:open`, `bun run live:tick`).
+
+> **For contributors / agents:** the live contract addresses + the venue's unit conventions (USDC
+> 6dp, mark/params WAD 18dp) are the source of truth in `packages/shared`. Note: a pool must be
+> seeded with LP capital before any position can open (the Layer-2 OI cap is `k·capital`, so a
+> 0-capital pool admits nothing) — `bun run live:open` does the seed + open in one step.
+
+**Next:** Phase 4 demo agents · Phase 5 SDK · Phase 6 Chainlink CRE (primary bounty) · Phase 7
+dashboard.
 
 ## How an agent onboards (quickstart — filled out in Phase 5)
 

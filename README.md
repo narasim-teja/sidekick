@@ -1,0 +1,178 @@
+<div align="center">
+
+# SideKick Perps
+
+**An agent-native perpetual futures venue on [Arc](https://docs.arc.io).**
+Per-block continuous funding · no liquidations · gas-free nanopayment settlement.
+
+</div>
+
+---
+
+## The one-liner
+
+SideKick is a perpetuals venue built for autonomous agents instead of human traders. Human
+perp venues bake in three assumptions that only exist because people are slow — funding settles
+every 8 hours, you get **liquidated at a penalty** when you cross a threshold, and you trade
+through an **order book of static orders**. Agents break all three: they respond every block. So
+we deleted those assumptions and rebuilt the venue for participants that act every ~2 seconds.
+
+## The problem (why agents consume perps differently)
+
+It is structural, not preference. Three human-era assumptions, each a workaround for human
+reaction time:
+
+- **Discrete funding (1–8h).** You cannot ask a human to settle a cashflow every few seconds, so
+  venues batch it — creating funding-boundary games and a lumpy signal.
+- **Threshold liquidation with penalty.** A human can't answer a margin call in 200ms, so the
+  venue force-closes at a penalty and pays a keeper. The buffer, keepers, penalty, insurance
+  fund, and ADL are all workarounds for slowness.
+- **Static orders in a book.** A human's intent is static between decisions, so a passive store
+  of frozen orders is the right abstraction.
+
+An agent has none of these limits. SideKick replaces them with:
+
+| Human-era assumption | SideKick |
+|---|---|
+| Funding every 8h | **Per-block continuous funding** — a clean, tradeable stream agents can hold in isolation |
+| Threshold liquidation + penalty | **Continuous margin reconciliation** — miss a call and your position *decrements smoothly*, no cliff, no penalty |
+| Static order book | Pool-as-counterparty + agent market-makers (intent-native matching is the design-doc endpoint) |
+
+None of this was buildable until Circle shipped **gas-free batched nanopayments** — per-block
+funding means thousands of sub-cent payments per block, economically impossible as on-chain
+transactions until months ago.
+
+## Architecture — the three-layer settlement model
+
+Value moves through three layers: **A computes who owes whom (off-chain), B moves it as signed
+authorizations (off-chain), C checkpoints truth to the chain (on-chain, batched).**
+
+```
+                            ┌──────────────────────────────────────────────┐
+   mark (Stork│Chainlink) ─▶│  LAYER A — Compute loop   (our Bun service)   │
+   via pluggable adapter    │  every ~2s Arc block:                         │
+                            │  mark → fund → check → call → settle → decr.  │   §4.3 loop order
+                            │  emits deltas (who owes whom, what shrank)     │
+                            └───────────────────────┬──────────────────────┘
+                                                    │ deltas
+                                                    ▼
+                            ┌──────────────────────────────────────────────┐
+                            │  LAYER B — Value transfer  (Circle Gateway)   │
+                            │  EIP-3009 / x402 signed authorizations,       │   @circle-fin/
+                            │  zero gas, against unified balances           │   x402-batching
+                            │  hundreds of sub-cent payments per block      │
+                            └───────────────────────┬──────────────────────┘
+                                                    │ accumulated state
+                                                    ▼
+                            ┌──────────────────────────────────────────────┐
+                            │  LAYER C — Settlement + checkpoint (on Arc)   │
+                            │  batch-settle + post authoritative state.     │   Chainlink CRE
+                            │  THIS IS THE CHAINLINK CRE WORKFLOW           │   workflow (Phase 6)
+                            │  (verified mark delivery + state transition)  │
+                            └──────────────────────────────────────────────┘
+```
+
+The hot loop (A+B) runs in our own fast Bun service; **Chainlink CRE** does the verifiable,
+periodic Layer C work (mark delivery + batch settlement) where BFT-consensus latency is free and
+the guarantee is the point. The mark is read through a **pluggable oracle adapter** — Stork *or*
+Chainlink, swappable per-market.
+
+> Deeper reasoning, the exact funding/decrement formulas, the pool-solvency layers, and the
+> judge Q&A live in the design docs (kept locally, not in this repo).
+
+## Monorepo layout
+
+Bun workspaces. TypeScript + Bun runtime, Hono for services, Foundry for contracts, Next.js +
+Tailwind + shadcn/ui for the dashboard, viem for chain interaction.
+
+```
+sidekick/
+├─ packages/
+│  ├─ shared/      @sidekick/shared    — types, 5 market configs, pluggable oracle adapter,
+│  │                                     Arc/Circle/Stork/Chainlink constants   ✅ Phase 0
+│  ├─ contracts/   @sidekick/contracts — Foundry: venue contracts (Phase 2) + Phase 0 spikes ✅
+│  ├─ engine/      @sidekick/engine    — off-chain per-block loop (Layer A+B); §4 core math ✅;
+│  │                                     economic simulation (Phase 1) + live service (Phase 3)
+│  ├─ sdk/         @sidekick/sdk       — agent-facing client (Phase 5)
+│  ├─ cre/         @sidekick/cre       — Chainlink CRE workflow, Layer C (Phase 6, $6k bounty)
+│  └─ agents/      @sidekick/agents    — autonomous demo agents (Phase 4)
+└─ apps/
+   └─ web/         @sidekick/web       — read-only observability dashboard (Phase 7)
+```
+
+## How to run
+
+**Prerequisites:** [Bun](https://bun.sh) ≥ 1.3, [Foundry](https://getfoundry.sh), and a
+throwaway wallet funded with testnet USDC from the [Circle faucet](https://faucet.circle.com)
+(USDC is Arc's gas token).
+
+```bash
+# 1. install workspace deps
+bun install
+
+# 2. restore Foundry libs (forge-std + OpenZeppelin are reinstallable, not committed)
+cd packages/contracts
+forge install foundry-rs/forge-std@v1.16.1 --no-git
+forge install OpenZeppelin/openzeppelin-contracts@v5.6.1 --no-git
+forge build && cd ../..
+
+# 3. configure env — copy the template and fill in your funded key
+cp .env.example .env
+#   → set PRIVATE_KEY (and optionally ALCHEMY_ARC_RPC_URL); all public addresses are pre-filled
+
+# 4. (optional) make a fresh throwaway wallet
+cast wallet new            # copy the private key into .env, fund the address at the faucet
+
+# 5. run the Phase 0 spikes against Arc testnet — all three pass
+bun run spike:arc          # Arc deploy + USDC gas + WSS read-back
+bun run spike:oracle       # oracle mark read via the pluggable adapter (Stork)
+bun run spike:gateway      # Gateway nanopayment round-trip (@circle-fin/x402-batching)
+```
+
+See [`packages/contracts/spikes/README.md`](packages/contracts/spikes/README.md) for what each
+spike confirms and the live results.
+
+## Build status
+
+**Phase 0 — scaffold + spikes: complete.** Monorepo wired (Bun workspaces, shared tsconfig +
+Biome), `@sidekick/shared` seeded with the five markets + pluggable oracle adapter + constants,
+Foundry set up, and **all three spikes passing live on Arc Testnet** (Arc deploy + USDC gas +
+WSS, on-chain oracle read via the adapter, and a Gateway unified-balance round-trip). Next:
+Phase 1 economic simulation to tune the funding/decrement constants.
+
+## How an agent onboards (quickstart — filled out in Phase 5)
+
+```ts
+import { SideKick } from "@sidekick/sdk";
+
+const sk = new SideKick({ network: "arc-testnet" /* chain 5042002 */ });
+
+// 1. onboard: fund the Gateway unified balance (one on-chain deposit), optional ERC-8004 identity
+await sk.onboard({ depositUSDC: "100" });
+
+// 2. subscribe to per-block state (mark, skew, funding, my positions)
+sk.on("block", (s) => { /* react every ~2s */ });
+
+// 3. open a position
+await sk.open({ market: "ETH-PERP", side: "long", collateral: "20", leverage: 10 });
+
+// 4. the SDK auto-answers per-block margin calls from the funded balance (configurable)
+```
+
+## Bounties (priority order)
+
+| Bounty | Prize | How SideKick fits |
+|---|---|---|
+| **Arc — Best Agentic Economy** | $3,250 | Per-block funding + margin calls are agent-to-agent USDC nanopayment commerce on Arc. **Primary — it is the project.** |
+| **Chainlink — Best workflow with CRE** | $6,000 | **Primary target.** One CRE workflow = pluggable oracle delivery (Stork *or* Chainlink) + periodic batch settlement posting authoritative state to Arc. |
+| **Chainlink — Connect the World** | $2,000 | A CRE-delivered Chainlink mark drives an on-chain state change (margin/decrement) in the settlement contract. Stacks on the same CRE integration. |
+
+## Tech
+
+`TypeScript` · `Bun` · `Hono` · `Foundry` · `viem` · `Next.js` · `Tailwind` · `shadcn/ui` ·
+Arc Testnet · Circle Gateway (`@circle-fin/x402-batching`) · Stork / Chainlink oracles ·
+Chainlink CRE.
+
+## License
+
+MIT.

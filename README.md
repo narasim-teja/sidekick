@@ -151,7 +151,7 @@ spike confirms and the live results.
   synthetic fallback for the assets Stork hasn't pushed on testnet — ETH/SOL/HYPE/LINK), runs the
   §4.3 reconciliation in **fixed point** (bit-for-bit parity with the on-chain Solidity — see
   `packages/engine/src/fixed`), triggers the on-chain `checkpoint`, settles Layer B margin-call
-  **nanopayments** via the x402 seller endpoint, and streams per-block state over WebSocket. 84
+  **nanopayments** via the x402 seller endpoint, and streams per-block state over WebSocket. 86
   engine tests + 72 contract tests green. See `packages/engine/README.md` for the full surface
   and the live scripts (`bun run live:open`, `bun run live:tick`).
 

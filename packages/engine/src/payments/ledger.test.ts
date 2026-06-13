@@ -1,7 +1,7 @@
 /**
- * Layer B ledger tests — the off-chain authorization record. Asserts it accumulates funding +
- * answered margin calls per account, exposes the per-block answered amount the loop lands on-chain,
- * and keeps the recent stream for the dashboard.
+ * Layer B ledger tests — the off-chain authorization record. Asserts it accumulates funding, keeps
+ * the contract's auto-settle distinct from Gateway nanopayments, exposes the answered amounts the
+ * loop lands on-chain (drain + requeue), and keeps the recent stream for the dashboard.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -26,22 +26,51 @@ describe("PaymentLedger", () => {
     expect(l.totalAuthorizations).toBe(0);
   });
 
-  test("answered margin calls are taken once per block, then cleared", () => {
+  test("auto-settle is a separate flow from x402 calls and never lands on-chain", () => {
     const l = new PaymentLedger();
-    l.beginBlock();
+    // The contract's in-checkpoint settle (collateral already in the Vault) — operational only.
+    l.recordAutoSettle(5, "BTC-PERP", "0xA", 7n * USDC, 5000);
+    expect(l.tallyOf("0xA").autoSettled).toBe(7n * USDC);
+    expect(l.tallyOf("0xA").marginAnswered).toBe(0n); // not a Gateway payment
+    expect(l.takeAnswered("BTC-PERP", "0xA")).toBe(0n); // never queued for answerMarginCall
+    expect(l.recent(1)[0]?.kind).toBe("auto-settle");
+    expect(l.recent(1)[0]?.amount).toBe(-7n * USDC); // recorded as a debit (account pays)
+  });
+
+  test("answered (x402) margin calls accumulate and are taken once, then cleared", () => {
+    const l = new PaymentLedger();
     l.recordAnsweredCall(5, "BTC-PERP", "0xA", 40n * USDC, 5000);
-    l.recordAnsweredCall(5, "BTC-PERP", "0xA", 10n * USDC, 5001); // two partials same block
+    l.recordAnsweredCall(5, "BTC-PERP", "0xA", 10n * USDC, 5001); // two partials
     expect(l.takeAnswered("BTC-PERP", "0xA")).toBe(50n * USDC); // summed
     expect(l.takeAnswered("BTC-PERP", "0xA")).toBe(0n); // consumed
     expect(l.tallyOf("0xA").marginAnswered).toBe(50n * USDC); // lifetime total persists
+    expect(l.recent(1)[0]?.kind).toBe("margin-call");
   });
 
-  test("beginBlock clears the per-block answered map but not lifetime tallies", () => {
+  test("takeAllAnswered drains every account for a market and leaves others untouched", () => {
     const l = new PaymentLedger();
     l.recordAnsweredCall(1, "BTC-PERP", "0xA", 5n * USDC, 1000);
-    l.beginBlock();
-    expect(l.takeAnswered("BTC-PERP", "0xA")).toBe(0n); // cleared for the new block
-    expect(l.tallyOf("0xA").marginAnswered).toBe(5n * USDC); // lifetime unchanged
+    l.recordAnsweredCall(1, "BTC-PERP", "0xB", 3n * USDC, 1000);
+    l.recordAnsweredCall(1, "ETH-PERP", "0xA", 9n * USDC, 1000);
+    const drained = l.takeAllAnswered("BTC-PERP").sort((a, b) => a[0].localeCompare(b[0]));
+    expect(drained).toEqual([
+      ["0xA", 5n * USDC],
+      ["0xB", 3n * USDC],
+    ]);
+    expect(l.takeAllAnswered("BTC-PERP")).toEqual([]); // drained
+    expect(l.takeAnswered("ETH-PERP", "0xA")).toBe(9n * USDC); // other market intact
+  });
+
+  test("requeueAnswered restores a failed landing without re-recording the settlement", () => {
+    const l = new PaymentLedger();
+    l.recordAnsweredCall(1, "BTC-PERP", "0xA", 5n * USDC, 1000);
+    const drained = l.takeAllAnswered("BTC-PERP");
+    expect(drained).toHaveLength(1);
+    const [account, amount] = drained[0] as [string, bigint];
+    l.requeueAnswered("BTC-PERP", account, amount); // landing failed → retry next tick
+    expect(l.takeAnswered("BTC-PERP", "0xA")).toBe(5n * USDC); // available again
+    expect(l.tallyOf("0xA").marginAnswered).toBe(5n * USDC); // tally NOT double-counted
+    expect(l.totalAuthorizations).toBe(1); // stream NOT appended on requeue
   });
 
   test("pool funding accrues per market", () => {

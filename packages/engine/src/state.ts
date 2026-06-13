@@ -11,6 +11,7 @@
 
 import type { MarketSymbol } from "@sidekick/shared";
 import type { MarkProvenance } from "./oracle/index.ts";
+import type { AuthorizationKind } from "./payments/ledger.ts";
 
 /** One position's per-block view (USDC decimal strings). */
 export interface PositionState {
@@ -31,11 +32,15 @@ export interface PositionState {
   outcome: "healthy" | "topped-up" | "decrement" | "gap";
 }
 
-/** A single settlement-flow event (the live nanopayment stream visual). */
+/**
+ * A single settlement-flow event (the live nanopayment stream visual). `kind` distinguishes the
+ * continuous funding stream, the contract's in-checkpoint `auto-settle` (collateral already in the
+ * Vault), and a real `margin-call` Gateway nanopayment — see {@link AuthorizationKind}.
+ */
 export interface SettlementEvent {
   block: number;
   account: string;
-  kind: "funding" | "margin-call";
+  kind: AuthorizationKind;
   /** Signed USDC decimal string (+ account receives, − account pays). */
   amount: string;
   at: number;

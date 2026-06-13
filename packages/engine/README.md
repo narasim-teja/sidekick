@@ -44,13 +44,21 @@ port** of `packages/contracts/src/lib/*`, proven by `src/fixed/parity.test.ts` a
 fixture emitted by `forge script script/GenParityVectors.s.sol` (`bun run gen:parity` in
 `packages/contracts`). Same inputs in → same outputs out, on-chain and off.
 
-### Layer B — the x402 seller
+### Layer B — the x402 seller (two settlement flows, kept distinct)
 
-The engine is the *payee* (`src/payments`). It exposes an x402 margin-call resource via Circle's
-`@circle-fin/x402-batching` server middleware (`POST /pay/:market/:account`), so an agent's
-`GatewayClient.pay()` settles a sub-cent margin-call nanopayment against the venue (verified +
-settled against Circle's testnet facilitator, gas-free), which the loop then lands on-chain via
-`answerMarginCall`. This completes the round-trip Spike C left open.
+The engine is the *payee* (`src/payments`). A margin call can be answered two ways, recorded as
+distinct ledger `kind`s so they are never double-counted (`src/payments/ledger.ts`):
+
+- **`auto-settle`** — the on-chain `checkpoint` itself pays the call from collateral already in the
+  Vault (§4.3 step 5). An internal contract move, not a Gateway payment; the off-chain reconcile
+  predicts it (`pr.paid`) and the loop streams it for the dashboard's operational view.
+- **`margin-call`** — a real **Gateway nanopayment**: the engine exposes an x402 resource via
+  Circle's `@circle-fin/x402-batching` server middleware (`POST /pay/:market/:account`), so an
+  agent's `GatewayClient.pay()` settles a sub-cent top-up against the venue (verified + settled
+  against Circle's testnet facilitator, gas-free). The loop drains settled payments
+  (`takeAllAnswered`) and **lands each on-chain via `answerMarginCall` at the top of the next tick**
+  — before the read/predict/checkpoint, so on-chain margin and the checkpoint reflect it — re-queuing
+  on a failed landing. This completes the round-trip Spike C left open.
 
 ### Run the live engine
 

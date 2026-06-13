@@ -70,7 +70,12 @@ export async function runMarketTick(
   const mark = await rt.oracle.getMark();
   const markWad = mark.price18;
 
-  // 2. Read on-chain state for the market's accounts.
+  // 2. Land any Gateway nanopayments settled via the x402 `/pay` route since the last tick — BEFORE
+  //    reading state — so the on-chain margin (and the prediction + checkpoint below) reflect them.
+  //    These are the proactive top-ups; the contract's own settle step is handled at step 4.
+  await landAnsweredCalls(rt.symbol, deps);
+
+  // 3. Read on-chain state for the market's accounts.
   await tracker.sync(BigInt(arcBlock));
   const accounts = tracker.accounts(rt.symbol);
   const [smoothSkewPrev, inputs] = await Promise.all([
@@ -79,23 +84,24 @@ export async function runMarketTick(
   ]);
   const params = toFixedParams(rt.config.params);
 
-  // 3. Off-chain §4.3 reconciliation (the prediction equal to the on-chain checkpoint).
+  // 4. Off-chain §4.3 reconciliation (the prediction equal to the on-chain checkpoint).
   const result = reconcileBlock(inputs, markWad, params, smoothSkewPrev, cadence);
 
-  // 4. Layer B: record the funding stream + the pool's net funding.
-  ledger.beginBlock();
+  // 5. Layer B: record the funding stream + the pool's net funding. `pr.paid` is the contract's OWN
+  //    in-checkpoint settle step (margin call paid from collateral already in the Vault) — an
+  //    on-chain internal move, recorded as `auto-settle`, NOT a Gateway nanopayment. Real x402
+  //    nanopayments are recorded by the `/pay` route and landed at step 2.
   for (const pr of result.positions) {
     if (pr.funding !== 0n) {
       ledger.recordFunding(rt.tick, rt.symbol, pr.account, pr.funding, at);
     }
-    // A margin-call shortfall the account paid this block is an answered call (settled top-up).
     if (pr.paid > 0n) {
-      ledger.recordAnsweredCall(rt.tick, rt.symbol, pr.account, pr.paid, at);
+      ledger.recordAutoSettle(rt.tick, rt.symbol, pr.account, pr.paid, at);
     }
   }
   ledger.recordPoolFunding(rt.symbol, result.poolFundingReceived);
 
-  // 5. Authoritative on-chain checkpoint at the cadence (skip ticks in between — graceful fallback).
+  // 6. Authoritative on-chain checkpoint at the cadence (skip ticks in between — graceful fallback).
   let checkpoint: MarketBlockState["checkpoint"];
   const shouldCheckpoint = accounts.length > 0 && rt.tick % deps.checkpointEveryBlocks === 0;
   if (shouldCheckpoint) {
@@ -119,7 +125,7 @@ export async function runMarketTick(
     }
   }
 
-  // 6. Build + emit the per-block state.
+  // 7. Build + emit the per-block state.
   const pool = await venue.poolSnapshot(rt.symbol, markWad);
   const state = buildState(
     rt,
@@ -135,6 +141,37 @@ export async function runMarketTick(
   );
   deps.emit(state);
   return state;
+}
+
+/**
+ * Land every Gateway nanopayment that the x402 `/pay` route has settled for this market since the
+ * last tick, crediting each account's on-chain position margin via `answerMarginCall`. Drains the
+ * ledger's answered map (so each payment lands exactly once) and confirms each tx. A landing that
+ * fails (e.g. the position closed, or insufficient free collateral) is logged and the amount is
+ * re-queued so a later tick retries it — a settled payment must never be silently dropped.
+ */
+async function landAnsweredCalls(symbol: MarketSymbol, deps: LoopDeps): Promise<void> {
+  const { venue, ledger } = deps;
+  const answered = ledger.takeAllAnswered(symbol);
+  for (const [account, amount] of answered) {
+    try {
+      const txHash = await venue.answerMarginCall(symbol, account as Address, amount);
+      const ok = await venue.confirm(txHash);
+      if (ok) {
+        deps.log?.(
+          `[${symbol}] answered margin call: ${account.slice(0, 8)}… +${formatUsdc(amount)} USDC ${txHash}`,
+        );
+      } else {
+        ledger.requeueAnswered(symbol, account, amount);
+        deps.log?.(`[${symbol}] answerMarginCall reverted (requeued): ${account.slice(0, 8)}…`);
+      }
+    } catch (err) {
+      ledger.requeueAnswered(symbol, account, amount);
+      deps.log?.(
+        `[${symbol}] answerMarginCall failed (requeued): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 }
 
 /** Read each account's position + free collateral into the reconcile inputs (open positions only). */

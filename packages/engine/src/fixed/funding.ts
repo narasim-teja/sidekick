@@ -3,8 +3,8 @@
  *
  *   S        = (OI_long − OI_short) / (OI_long + OI_short)        // skew [−1,+1] (WAD)
  *   S_smooth = λ·S + (1 − λ)·S_smooth_prev                        // EMA (WAD)
- *   rate     = clamp(α · S_smooth · |S_smooth|, −r_max, +r_max)   // convex γ=2, clamped (WAD)
- *   payment  = N · rate · (Δt / T)                                // per-block, USDC 6dp magnitude
+ *   rate     = clamp(α · S_smooth · |S_smooth|, −r_max, +r_max)   // convex γ=2, clamped (WAD); per PERIOD T
+ *   payment  = N · rate · (Δt / T)                                // per-BLOCK cashflow (Δt/T scales the period rate), USDC 6dp
  *
  * Units: OI / notional / payment in USDC 6dp; skew / rate / α / λ / r_max in WAD. The order of
  * operations matches the Solidity exactly (multiply before the period division in `fundingPayment`,
@@ -16,11 +16,11 @@
 import { abs, clamp, wadDiv, wadMul } from "./signed-wad.ts";
 import { WAD } from "./units.ts";
 
-/** Per-block funding parameters, WAD. Mirrors `Funding.Params`. */
+/** Funding parameters, WAD. Mirrors `Funding.Params`. (The rate is per funding PERIOD T; the payment is per block.) */
 export interface FundingParams {
   /** Funding scale α (WAD), ~ r_max in magnitude. */
   alpha: bigint;
-  /** Per-block rate clamp r_max (WAD), ≥ 0. */
+  /** Per-period rate clamp r_max (WAD), ≥ 0 — the rate is per funding period T, scaled to per-block by Δt/T in the payment. */
   rMax: bigint;
   /** EMA smoothing λ (WAD), ∈ (0, 1]. */
   lambda: bigint;

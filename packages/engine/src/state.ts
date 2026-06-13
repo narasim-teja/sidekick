@@ -106,3 +106,69 @@ export interface EngineStatus {
   /** Latest tick per market. */
   ticks: Record<string, number>;
 }
+
+/**
+ * One market's entry in the {@link VenueDescriptor} — everything a brand-new agent needs to trade
+ * this market without any prior knowledge of the venue: its economic parameters, on-chain addresses,
+ * oracle source, and a live snapshot of the headline numbers (mark / skew / funding / OI).
+ */
+export interface VenueMarketDescriptor {
+  symbol: MarketSymbol;
+  name: string;
+  /** Oracle asset symbol, e.g. "BTCUSD". */
+  asset: string;
+  /** The bytes32 market id the on-chain registry keys by (also the SDK's `marketId`). */
+  marketId: string;
+  /** Economic parameters (Doc 1 §4/§10): m, α, λ, r_max, k. */
+  params: { m: number; alpha: number; lambda: number; rMax: number; k: number };
+  /** Which oracle source backs the mark, and whether it's a live feed or the synthetic fallback. */
+  oracle: { source: "stork" | "chainlink"; assetId: string };
+  /** On-chain addresses for this market (isolated pool + LP token + oracle adapter). */
+  contracts: { pool: string; lpToken: string; oracleAdapter: string };
+  /** Live snapshot (null until the engine has produced a state for this market). */
+  live: {
+    mark: string;
+    markProvenance: MarkProvenance;
+    skew: number;
+    fundingRate: number;
+    oiLong: string;
+    oiShort: string;
+    poolCapital: string;
+  } | null;
+}
+
+/**
+ * The venue's self-description (the REST `GET /venue` payload) — a single, dependency-free document
+ * an external agent fetches to self-configure: the chain, the shared contracts, the per-market
+ * params + addresses + live headline numbers, the block cadence, and the units convention. This is
+ * the "discover the venue with zero prior knowledge" entry point that makes SideKick self-describing.
+ */
+export interface VenueDescriptor {
+  name: "sidekick";
+  /** Engine version (matches the WS `hello` frame). */
+  version: string;
+  chainId: number;
+  /** Block the venue contracts were deployed at (event-backfill origin). */
+  deploymentBlock: number;
+  /** The checkpoint operator (engine signer) address. */
+  operator: string;
+  /** Shared (non-per-market) contract addresses. */
+  contracts: {
+    usdc: string;
+    vault: string;
+    marketRegistry: string;
+    perpEngine: string;
+    accountManager: string;
+  };
+  /** Cadence: Arc block time + how often a checkpoint lands on-chain + the funding reference period. */
+  cadence: { blockSeconds: number; checkpointEveryBlocks: number; fundingPeriodSeconds: number };
+  /** Units convention so a consumer never guesses decimals. */
+  units: {
+    collateral: "USDC";
+    collateralDecimals: 6;
+    markDecimals: 18;
+    amountsInPayloads: "decimal-string";
+  };
+  /** Every market the engine is currently running. */
+  markets: VenueMarketDescriptor[];
+}

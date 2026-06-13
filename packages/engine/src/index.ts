@@ -22,9 +22,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { MarketSymbol } from "@sidekick/shared";
 import { MARKET_SYMBOLS } from "@sidekick/shared";
+import { ENGINE_VERSION } from "./config.ts";
 import { type EngineConfig, EngineService } from "./service.ts";
 
-export const ENGINE_VERSION = "0.3.1" as const;
+export { ENGINE_VERSION } from "./config.ts";
 
 export * as fixed from "./fixed/index.ts";
 export type { EngineConfig } from "./service.ts";

@@ -9,6 +9,13 @@
 
 import { BLOCK_SECONDS, FUNDING_PERIOD_SECONDS } from "@sidekick/shared";
 
+/**
+ * Engine version — surfaced in the WS `hello` frame and the `GET /venue` descriptor so a consumer
+ * can pin the engine it's talking to. Lives here (not index.ts) so `service.ts` can import it without
+ * a cycle. Bump on a payload/route change.
+ */
+export const ENGINE_VERSION = "0.3.1" as const;
+
 /** Arc block cadence Δt (seconds) as a bigint, for `N·rate·(Δt/T)`. */
 export const BLOCK_SECONDS_BIG = BigInt(BLOCK_SECONDS);
 

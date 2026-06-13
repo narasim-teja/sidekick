@@ -17,6 +17,8 @@ export type {
   PoolState,
   PositionState,
   SettlementEvent,
+  VenueDescriptor,
+  VenueMarketDescriptor,
 } from "@sidekick/engine/state";
 
 // The shared market vocabulary.

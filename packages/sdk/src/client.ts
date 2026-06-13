@@ -147,6 +147,19 @@ export class SideKick {
   }
 
   /**
+   * Fetch the venue's self-description — the one call that lets an agent self-configure with **zero
+   * prior knowledge**: the live markets and their params (m, α, λ, r_max, k), the on-chain contract
+   * addresses, the oracle source per market, the block/checkpoint/funding cadence, the units
+   * convention, and a live headline snapshot (mark / skew / funding / OI) per market. An agent can
+   * discover what to trade and how it's sized purely from this, without importing the deployment.
+   */
+  async venue(): Promise<import("./types.ts").VenueDescriptor> {
+    const res = await fetch(`${this.engineUrl}/venue`);
+    if (!res.ok) throw new Error(`engine /venue → ${res.status}`);
+    return (await res.json()) as import("./types.ts").VenueDescriptor;
+  }
+
+  /**
    * Subscribe to the per-block state stream — the event loop an agent hangs off of (Doc 2 §5.1
    * "Subscribe"). Returns an unsubscribe function. The underlying WS auto-reconnects; the first
    * `block` frame arrives on the next engine tick. Multiple handlers share one socket.

@@ -54,6 +54,8 @@ export type {
   Side,
   SideKickConfig,
   Signer,
+  VenueDescriptor,
+  VenueMarketDescriptor,
 } from "./types.ts";
 // Unit helpers (decimal-string ⇄ venue integers) for consumers that need them.
 export { formatUsdc, formatWad, notionalFromLeverage, parseMarkWad, parseUsdc } from "./units.ts";

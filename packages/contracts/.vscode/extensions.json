@@ -6,8 +6,5 @@
 
   // The Hardhat/Nomic Solidity extension fights the Juan Blanco one (both own .sol). Disable it for
   // this folder so diagnostics come from the Foundry-aware LSP only.
-  "unwantedRecommendations": [
-    "NomicFoundation.hardhat-solidity",
-    "NomicFoundation.solidity"
-  ]
+  "unwantedRecommendations": ["NomicFoundation.hardhat-solidity", "NomicFoundation.solidity"]
 }

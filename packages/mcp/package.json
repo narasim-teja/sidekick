@@ -1,0 +1,25 @@
+{
+  "name": "@sidekick/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "@sidekick/mcp — an MCP server that exposes the SideKick venue as tools, so any MCP client (Claude, etc.) can discover, onboard, trade, and settle margin calls on SideKick via tool calls. The literal 'agent-native' surface — built on @sidekick/sdk.",
+  "bin": {
+    "sidekick-mcp": "./src/index.ts"
+  },
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@sidekick/sdk": "workspace:*",
+    "@sidekick/shared": "workspace:*",
+    "viem": "2.52.2",
+    "zod": "4.4.3"
+  }
+}

@@ -14,7 +14,13 @@
  * in `chain/`, and Layer B in `payments/`. `index.ts` is the entry point that constructs + starts it.
  */
 
-import { getMarket, type MarketSymbol } from "@sidekick/shared";
+import {
+  BLOCK_SECONDS,
+  FUNDING_PERIOD_SECONDS,
+  getMarket,
+  type MarketSymbol,
+  marketId as marketIdOf,
+} from "@sidekick/shared";
 import { Hono } from "hono";
 import type { Address, PublicClient } from "viem";
 import { AccountTracker } from "./chain/accounts.ts";
@@ -28,13 +34,18 @@ import {
 } from "./chain/clients.ts";
 import { Venue } from "./chain/venue.ts";
 import type { Cadence } from "./compute/reconcile.ts";
-import { BLOCK_SECONDS_BIG, FUNDING_PERIOD_BIG } from "./config.ts";
+import { BLOCK_SECONDS_BIG, ENGINE_VERSION, FUNDING_PERIOD_BIG } from "./config.ts";
 import { type LoopDeps, type MarketRuntime, makeMarketRuntime, runMarketTick } from "./loop.ts";
 import { makeOracle } from "./oracle/index.ts";
 import { PaymentLedger } from "./payments/ledger.ts";
 import { paymentRoutes } from "./payments/routes.ts";
 import { GatewaySeller } from "./payments/seller.ts";
-import type { EngineStatus, MarketBlockState } from "./state.ts";
+import type {
+  EngineStatus,
+  MarketBlockState,
+  VenueDescriptor,
+  VenueMarketDescriptor,
+} from "./state.ts";
 
 /** Engine configuration. */
 export interface EngineConfig {
@@ -223,6 +234,80 @@ export class EngineService {
     };
   }
 
+  /**
+   * The venue self-description (`GET /venue`): everything an external agent needs to self-configure
+   * with zero prior knowledge — chain, shared contracts, per-market params + addresses + a live
+   * headline snapshot, cadence, and the units convention. Built fresh each call so the `live` block
+   * reflects the latest reconciled state.
+   */
+  private descriptor(): VenueDescriptor {
+    const dep = this.venue.deployment;
+    const markets: VenueMarketDescriptor[] = this.markets.map((symbol) => {
+      const cfg = getMarket(symbol);
+      const md = dep.markets[symbol];
+      const s = this.latest.get(symbol);
+      return {
+        symbol,
+        name: cfg.name,
+        asset: cfg.asset,
+        marketId: marketIdOf(symbol),
+        params: {
+          m: cfg.params.m,
+          alpha: cfg.params.alpha,
+          lambda: cfg.params.lambda,
+          rMax: cfg.params.rMax,
+          k: cfg.params.k,
+        },
+        oracle: {
+          source: cfg.oracle.source,
+          assetId: cfg.oracle.source === "stork" ? cfg.oracle.assetId : cfg.oracle.feedId,
+        },
+        contracts: {
+          pool: md?.pool ?? "",
+          lpToken: md?.lpToken ?? "",
+          oracleAdapter: md?.oracleAdapter ?? "",
+        },
+        live: s
+          ? {
+              mark: s.mark,
+              markProvenance: s.markProvenance,
+              skew: s.skew,
+              fundingRate: s.fundingRate,
+              oiLong: s.oiLong,
+              oiShort: s.oiShort,
+              poolCapital: s.pool.capital,
+            }
+          : null,
+      };
+    });
+    return {
+      name: "sidekick",
+      version: ENGINE_VERSION,
+      chainId: dep.chainId,
+      deploymentBlock: Number(dep.deploymentBlock),
+      operator: this.operator,
+      contracts: {
+        usdc: dep.usdc,
+        vault: dep.vault,
+        marketRegistry: dep.marketRegistry,
+        perpEngine: dep.perpEngine,
+        accountManager: dep.accountManager,
+      },
+      cadence: {
+        blockSeconds: BLOCK_SECONDS,
+        checkpointEveryBlocks: this.checkpointEveryBlocks,
+        fundingPeriodSeconds: FUNDING_PERIOD_SECONDS,
+      },
+      units: {
+        collateral: "USDC",
+        collateralDecimals: 6,
+        markDecimals: 18,
+        amountsInPayloads: "decimal-string",
+      },
+      markets,
+    };
+  }
+
   // ── HTTP ───────────────────────────────────────────────────────────────────────
 
   private buildApp(): Hono {
@@ -230,6 +315,9 @@ export class EngineService {
 
     app.get("/", (c) => c.json({ name: "sidekick-engine", status: "ok" }));
     app.get("/status", (c) => c.json(this.status()));
+    // Self-description: a brand-new agent fetches this to learn the venue (markets, params,
+    // addresses, cadence, live headline numbers) with zero prior knowledge.
+    app.get("/venue", (c) => c.json(this.descriptor()));
     app.get("/state", (c) => c.json([...this.latest.values()]));
     app.get("/state/:market", (c) => {
       const s = this.latest.get(c.req.param("market") as MarketSymbol);

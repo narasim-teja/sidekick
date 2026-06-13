@@ -94,8 +94,11 @@ sidekick/
 │  ├─ engine/      @sidekick/engine    — off-chain per-block loop (Layer A+B); §4 core math ✅;
 │  │                                     economic simulation (Phase 1) + live service (Phase 3)
 │  ├─ sdk/         @sidekick/sdk       — agent-facing client (Phase 5)
+│  ├─ mcp/         @sidekick/mcp       — MCP server: the venue as tools for any LLM agent
 │  ├─ cre/         @sidekick/cre       — Chainlink CRE workflow, Layer C (Phase 6, $6k bounty)
 │  └─ agents/      @sidekick/agents    — autonomous demo agents (Phase 4)
+├─ examples/                           — copy-pasteable agent examples (standalone-agent.ts)
+├─ AGENTS.md                           — the single agent-facing reference (read this to integrate)
 └─ apps/
    └─ web/         @sidekick/web       — read-only observability dashboard (Phase 7)
 ```
@@ -163,24 +166,42 @@ spike confirms and the live results.
 **Next:** Phase 4 demo agents · Phase 5 SDK · Phase 6 Chainlink CRE (primary bounty) · Phase 7
 dashboard.
 
-## How an agent onboards (quickstart — filled out in Phase 5)
+## Build an agent
+
+Three entry points, smallest to largest. The full reference — every call, endpoint, and the data
+model — is **[AGENTS.md](AGENTS.md)** (the one page to read before integrating).
+
+**1. The SDK** — `@sidekick/sdk`. A stranger self-configures from the venue's own descriptor:
 
 ```ts
 import { SideKick } from "@sidekick/sdk";
 
-const sk = new SideKick({ network: "arc-testnet" /* chain 5042002 */ });
+const sk = new SideKick({ network: "arc-testnet", privateKey });   // chain 5042002
 
-// 1. onboard: fund the Gateway unified balance (one on-chain deposit), optional ERC-8004 identity
-await sk.onboard({ depositUSDC: "100" });
-
-// 2. subscribe to per-block state (mark, skew, funding, my positions)
-sk.on("block", (s) => { /* react every ~2s */ });
-
-// 3. open a position
+const { markets } = await sk.venue();                              // discover: markets, params, addresses, cadence
+await sk.onboard({ depositUSDC: "20", gatewayUSDC: "5" });         // Vault collateral + Gateway balance
+sk.on("block", (s) => { /* live mark, skew, funding, my positions, settlement — every ~2s */ });
 await sk.open({ market: "ETH-PERP", side: "long", collateral: "20", leverage: 10 });
-
-// 4. the SDK auto-answers per-block margin calls from the funded balance (configurable)
+if (await sk.owed("ETH-PERP") > 0n) await sk.answerMarginCall("ETH-PERP");  // gas-free x402 nanopayment
+// miss a call and your position decrements smoothly — there is no liquidation
 ```
+
+**2. A runnable example** — [`examples/standalone-agent.ts`](examples/standalone-agent.ts): the full
+discover → onboard → observe → decide → act → settle loop in one file, with a `--new-key` on-ramp.
+
+```bash
+bun run example --new-key            # mint + print a fundable agent address
+AGENT_PRIVATE_KEY=0x... bun run example --collateral 10 --leverage 5 --blocks 30
+```
+
+**3. MCP** — `@sidekick/mcp` exposes every capability as MCP tools, so any LLM (Claude, etc.) trades
+on SideKick by calling tools (`sidekick_venue`, `sidekick_open`, `sidekick_answer_margin_call`, …).
+`SIDEKICK_PRIVATE_KEY=0x... bun run mcp`, or wire it into an MCP client — see
+[`packages/mcp`](packages/mcp).
+
+The venue is **self-describing**: `GET /venue` (or `sk.venue()`) returns the live markets, their
+params, the on-chain addresses, the cadence, the units, and a live headline snapshot — so an agent
+needs zero hardcoded constants to start.
 
 ## Tech
 

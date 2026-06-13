@@ -9,7 +9,8 @@
     "./markets": "./src/markets.ts",
     "./constants": "./src/constants.ts",
     "./oracle": "./src/oracle.ts",
-    "./chain": "./src/chain.ts"
+    "./chain": "./src/chain.ts",
+    "./deployments": "./src/deployments.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

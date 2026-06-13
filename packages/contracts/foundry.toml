@@ -7,15 +7,30 @@ script = "script"
 solc = "0.8.28"
 optimizer = true
 optimizer_runs = 200
+# via-IR: the §4.3 checkpoint loop carries enough locals to exceed the legacy stack; the IR
+# pipeline resolves it and yields better-optimized bytecode. Standard for contracts this dense.
+via_ir = true
 evm_version = "cancun"
-# Allow reading .env-driven paths and the repo root for shared artifacts.
-fs_permissions = [{ access = "read", path = "./" }]
+# Allow reading the repo root for shared artifacts, and writing the parity-vector fixture
+# (GenParityVectors.s.sol emits test/fixtures/parity-vectors.json for the engine's parity test).
+fs_permissions = [
+  { access = "read", path = "./" },
+  { access = "write", path = "./test/fixtures" },
+]
 
 remappings = [
   "forge-std/=lib/forge-std/src/",
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "@storknetwork/stork-evm-sdk/=lib/stork-evm-sdk/",
 ]
+
+[fuzz]
+runs = 256
+
+[invariant]
+runs = 256
+depth = 50
+fail_on_revert = false
 
 [rpc_endpoints]
 arc_testnet = "${ARC_RPC_URL}"

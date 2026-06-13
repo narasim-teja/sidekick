@@ -18,6 +18,8 @@
     "spike:gateway": "bun run packages/contracts/spikes/c-gateway-roundtrip.ts",
     "spikes": "bun run spike:arc && bun run spike:oracle && bun run spike:gateway",
     "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "sim": "bun run --filter '@sidekick/engine' sim",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check --write ."

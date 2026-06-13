@@ -9,12 +9,18 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test src",
     "sim": "bun run src/sim/index.ts",
-    "dev": "bun run --hot src/index.ts"
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "live:tick": "bun run src/scripts/live-tick.ts",
+    "live:open": "bun run src/scripts/live-open.ts"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "3.0.4",
     "@sidekick/shared": "workspace:*",
+    "@x402/core": "2.15.0",
+    "@x402/evm": "2.15.0",
     "hono": "4.12.25",
     "viem": "2.52.2"
   }

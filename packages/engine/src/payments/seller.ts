@@ -50,10 +50,19 @@ export interface SettleResult {
 }
 
 /**
- * The engine's Gateway seller. Wraps `createGatewayMiddleware` and exposes the two operations the
- * Hono routes need — `verify` (is this authorization valid against the unified balance?) and
- * `settle` (debit the agent → credit the engine). Constructing it does not open any socket; it just
- * configures the facilitator client.
+ * The engine's Gateway seller. Wraps `createGatewayMiddleware` and exposes its operations to the
+ * Hono routes:
+ *
+ *   - `require(price)` — Circle's own x402 resource middleware. This is the CORRECT way to emit the
+ *     402: it fetches the facilitator's supported kinds and builds standards-compliant payment
+ *     requirements (real `payTo` = the seller address, the real USDC token `asset`, and the
+ *     GatewayWallet `extra.verifyingContract`) into a base64 `PAYMENT-REQUIRED` header, exactly what
+ *     the buyer's `GatewayClient.pay()` reads to sign an EIP-3009 authorization. Hand-rolling the 402
+ *     (placeholder `payTo`/`asset` in the body) cannot be signed against — so the route drives this
+ *     middleware via a tiny Hono↔Express shim instead.
+ *   - `verify` / `settle` — kept for callers that want the low-level operations directly.
+ *
+ * Constructing it does not open any socket; it just configures the facilitator client.
  */
 export class GatewaySeller {
   private readonly mw: GatewayMiddleware;
@@ -64,6 +73,16 @@ export class GatewaySeller {
       networks: ARC_CAIP2,
       facilitatorUrl: config.facilitatorUrl ?? TESTNET_FACILITATOR_URL,
     });
+  }
+
+  /**
+   * Circle's x402 resource middleware for a given price (dollar string, e.g. `"$0.01"`). It emits the
+   * facilitator-standard 402 (the `PAYMENT-REQUIRED` header with real payTo/asset/verifyingContract)
+   * when unpaid, and verifies + settles when the buyer retries with a signed authorization. The route
+   * runs it through a Hono↔Express shim (`payments/routes.ts`).
+   */
+  require(price: string): ReturnType<GatewayMiddleware["require"]> {
+    return this.mw.require(price);
   }
 
   /** Verify a payment authorization without settling (cheap pre-check). */

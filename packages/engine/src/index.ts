@@ -24,7 +24,7 @@ import type { MarketSymbol } from "@sidekick/shared";
 import { MARKET_SYMBOLS } from "@sidekick/shared";
 import { type EngineConfig, EngineService } from "./service.ts";
 
-export const ENGINE_VERSION = "0.3.0" as const;
+export const ENGINE_VERSION = "0.3.1" as const;
 
 export * as fixed from "./fixed/index.ts";
 export type { EngineConfig } from "./service.ts";

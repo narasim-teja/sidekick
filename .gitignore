@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Local reference docs (kept out of the public repo by request)
+docs/
+
+# Env / secrets — NEVER commit real keys
+.env
+.env.*
+!.env.example
+
+# Builds / outputs
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Foundry (packages/contracts)
+cache/
+broadcast/
+# keep deployment artifacts (broadcast/**/run-latest.json) out of git; addresses live in packages/shared
+# Reinstallable forge deps — pulled via `forge install` (see packages/contracts/README).
+# Ignore the big reinstallable libs by name; the vendored Stork SDK (lib/stork-evm-sdk/) is
+# ours to keep and stays tracked because it is not matched here.
+packages/contracts/lib/forge-std/
+packages/contracts/lib/openzeppelin-contracts/
+
+# Bun
+.bun/
+
+# Logs / sim outputs
+*.log
+logs/
+sim-out/
+*.csv
+!packages/shared/**/*.csv
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp

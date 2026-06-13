@@ -1,0 +1,13 @@
+{
+  "schedule": "*/30 * * * * *",
+  "marketId": "0x4c494e4b2d504552500000000000000000000000000000000000000000000000",
+  "evms": [
+    {
+      "perpEngineAddress": "0xb07C345cCce65AC168eD47f91bf75F3311Db93a6",
+      "markReceiverAddress": "0x130006A6E9CF11115F5f0b7c47100Dd767DfC44C",
+      "settlerAddress": "0x482CAdEbEf6Bc6812bf41Da43C0732C8c1Ab64ec",
+      "chainSelectorName": "arc-testnet",
+      "gasLimit": "2000000"
+    }
+  ]
+}

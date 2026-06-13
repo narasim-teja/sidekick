@@ -182,20 +182,8 @@ await sk.open({ market: "ETH-PERP", side: "long", collateral: "20", leverage: 10
 // 4. the SDK auto-answers per-block margin calls from the funded balance (configurable)
 ```
 
-## Bounties (priority order)
-
-| Bounty | Prize | How SideKick fits |
-|---|---|---|
-| **Arc — Best Agentic Economy** | $3,250 | Per-block funding + margin calls are agent-to-agent USDC nanopayment commerce on Arc. **Primary — it is the project.** |
-| **Chainlink — Best workflow with CRE** | $6,000 | **Primary target.** One CRE workflow = pluggable oracle delivery (Stork *or* Chainlink) + periodic batch settlement posting authoritative state to Arc. |
-| **Chainlink — Connect the World** | $2,000 | A CRE-delivered Chainlink mark drives an on-chain state change (margin/decrement) in the settlement contract. Stacks on the same CRE integration. |
-
 ## Tech
 
 `TypeScript` · `Bun` · `Hono` · `Foundry` · `viem` · `Next.js` · `Tailwind` · `shadcn/ui` ·
 Arc Testnet · Circle Gateway (`@circle-fin/x402-batching`) · Stork / Chainlink oracles ·
 Chainlink CRE.
-
-## License
-
-MIT.

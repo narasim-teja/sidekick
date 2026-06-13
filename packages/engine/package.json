@@ -9,6 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test src",
     "sim": "bun run src/sim/index.ts",
     "dev": "bun run --hot src/index.ts"
   },

@@ -2,10 +2,9 @@
  * The five SideKick markets and their economic parameters.
  *
  * Each market is an isolated pool parameterized by `{m, α, λ, r_max, k}` (Doc 1 §10). The
- * values here are **pre-sweep defaults** seeded from Doc 1 §4 — they are deliberately
- * placeholders to be overwritten by the Phase 1 simulation sweep (Doc 2 Phase 1), which
- * writes the chosen constants back to this file. `γ` (the funding convexity) is fixed at 2
- * and is not swept.
+ * values in `DEFAULT_PARAMS` below were **chosen by the Phase 1 constants sweep** (Doc 2 Phase 1)
+ * and are written back here by `bun run sim sweep --write` — re-run the sweep to change them.
+ * `γ` (the funding convexity) is fixed at 2 and is not swept.
  *
  * @see docs/01-PROJECT-AND-ARCHITECTURE.md §4 (formulas), §10 (markets)
  * @see docs/02-PHASED-BUILD-PLAN.md Phase 1 (constants sweep)
@@ -62,16 +61,21 @@ export interface MarketConfig {
 }
 
 /**
- * Pre-sweep default parameters, shared across markets until Phase 1 differentiates them.
- * Conservative starting point: 1% maintenance, mild funding gain, λ at the low end for
- * manipulation resistance, a 0.1%/period rate cap, and a 5× pool-capital OI cap.
+ * Funding + risk parameters shared across markets, chosen by the Phase 1 constants sweep
+ * (`packages/engine`, `bun run sim sweep --write`). The sweep grid-searches {m, α, λ, r_max, k}
+ * and auto-selects against the four Doc 2 §1.3 criteria with a hard pool-invariant gate; the
+ * `α = r_max` result puts the funding clamp at S = ±1 (full convex range, circuit-breaker only at
+ * the extreme), with λ at the low end of its band for manipulation resistance and a tight k = 3
+ * OI cap. Per-market differentiation is a later refinement once real per-asset oracle volatility
+ * is available. Re-run the sweep to change these — the block below is overwritten by write-back.
  */
 const DEFAULT_PARAMS: MarketParams = {
+  // sweep-selected — blended score 0.945 across 8 scenarios (see comment above).
   m: 0.01,
-  alpha: 0.5,
-  lambda: 0.15,
-  rMax: 0.001,
-  k: 5,
+  alpha: 0.0005,
+  lambda: 0.08,
+  rMax: 0.0005,
+  k: 3,
 };
 
 /** Build a Stork-backed oracle config for an asset symbol. */

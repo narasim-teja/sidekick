@@ -1,0 +1,17 @@
+{
+  "name": "@sidekick/cre",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "@sidekick/cre — the Chainlink CRE workflow (Layer C): pluggable oracle delivery (Stork or Chainlink) + periodic batch settlement posting authoritative state to Arc. PRIMARY bounty target ($6k). Built in Phase 6 on top of the working Arc venue.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sidekick/shared": "workspace:*",
+    "viem": "2.52.2"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@sidekick/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "@sidekick/sdk — the agent-facing TypeScript client: read state, act (open/close/adjust, post/withdraw, answer margin calls), and subscribe to the per-block event stream. The venue from the consumer's POV. (Built out in Phase 5.)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sidekick/shared": "workspace:*",
+    "viem": "2.52.2"
+  }
+}

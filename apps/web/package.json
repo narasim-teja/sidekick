@@ -1,0 +1,9 @@
+{
+  "name": "@sidekick/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "@sidekick/web — the human-facing, read-only observability dashboard (Next.js + Tailwind + shadcn/ui). Visualizes the per-block loop: skew vs cap, funding rate, the nanopayment settlement stream, smooth decrement. NOT a trading chart. Scaffolded in Phase 7.",
+  "scripts": {
+    "//": "Next.js app is initialized in Phase 7 (next dev / build / start land here)."
+  }
+}

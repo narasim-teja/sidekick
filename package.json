@@ -20,6 +20,9 @@
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
     "sim": "bun run --filter '@sidekick/engine' sim",
+    "engine": "bun run --filter '@sidekick/engine' dev",
+    "fund": "bun run --filter '@sidekick/agents' fund",
+    "demo": "bun run --filter '@sidekick/agents' demo",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check --write ."

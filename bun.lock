@@ -16,10 +16,11 @@
     },
     "packages/agents": {
       "name": "@sidekick/agents",
-      "version": "0.0.0",
+      "version": "0.4.0",
       "dependencies": {
         "@sidekick/sdk": "workspace:*",
         "@sidekick/shared": "workspace:*",
+        "viem": "2.52.2",
       },
     },
     "packages/contracts": {
@@ -45,16 +46,18 @@
       "dependencies": {
         "@circle-fin/x402-batching": "3.0.4",
         "@sidekick/shared": "workspace:*",
-        "@x402/core": "^2.3.0",
-        "@x402/evm": "^2.3.0",
+        "@x402/core": "2.15.0",
+        "@x402/evm": "2.15.0",
         "hono": "4.12.25",
         "viem": "2.52.2",
       },
     },
     "packages/sdk": {
       "name": "@sidekick/sdk",
-      "version": "0.0.0",
+      "version": "0.5.0",
       "dependencies": {
+        "@circle-fin/x402-batching": "3.0.4",
+        "@sidekick/engine": "workspace:*",
         "@sidekick/shared": "workspace:*",
         "viem": "2.52.2",
       },

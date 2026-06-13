@@ -6,12 +6,12 @@
  * Requires a funded `PRIVATE_KEY` (the checkpoint operator) and the live deployment in shared. Open
  * a position first (e.g. via `live:open`) so the loop has something to reconcile.
  *
- * Run: `bun run live:tick` (optionally `ENGINE_MARKETS=BTC-PERP,ETH-PERP bun run live:tick`).
+ * Run: `bun run live:tick` (optionally `MARKETS=BTC-PERP,ETH-PERP bun run live:tick`).
  */
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { MARKET_SYMBOLS, type MarketSymbol } from "@sidekick/shared";
+import { resolveMarketSet } from "@sidekick/shared";
 import { EngineService } from "../service.ts";
 
 loadRootEnv();
@@ -32,19 +32,9 @@ function loadRootEnv(): void {
   }
 }
 
-function markets(): MarketSymbol[] {
-  const raw = process.env.ENGINE_MARKETS;
-  if (!raw) return ["BTC-PERP"];
-  if (raw === "all") return [...MARKET_SYMBOLS];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s): s is MarketSymbol => (MARKET_SYMBOLS as string[]).includes(s));
-}
-
 async function main(): Promise<void> {
   const engine = new EngineService({
-    markets: markets(),
+    markets: resolveMarketSet(process.env),
     checkpointEveryBlocks: Number(process.env.CHECKPOINT_EVERY_BLOCKS ?? "1"),
   });
   console.log("running one live reconciliation tick against Arc…\n");

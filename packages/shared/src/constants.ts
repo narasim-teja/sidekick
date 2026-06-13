@@ -59,6 +59,37 @@ export const STORK = {
   restUrl: "https://rest.jp.stork-oracle.network",
 } as const;
 
+// ── Chainlink Data Streams (mark option B — the pull path that mirrors Stork) ──────
+// The REST Data Engine serves signed `fullReport` blobs (HMAC auth via CHAINLINK_API_KEY/SECRET);
+// the on-chain Verifier proxy validates them. `verifier`/`feeToken` are STUBS (undefined) — the Arc
+// Data Streams Verifier proxy + fee-token addresses are not yet confirmed, so they are supplied via
+// env (CHAINLINK_VERIFIER / CHAINLINK_FEE_TOKEN) until pinned. Until then the on-chain
+// ChainlinkAdapter runs in relay mode (owner seeds marks via `pushMarkUnverified`).
+export const CHAINLINK = {
+  /** Data Streams REST base (testnet Data Engine). Override via CHAINLINK_STREAMS_HOST. */
+  streamsHost: "api.testnet-dataengine.chain.link",
+  /** Arc Data Streams Verifier proxy — UNCONFIRMED; supply via CHAINLINK_VERIFIER when known. */
+  verifier: undefined as Address | undefined,
+  /** Verify fee token (wrapped-native or LINK) — UNCONFIRMED; supply via CHAINLINK_FEE_TOKEN. */
+  feeToken: undefined as Address | undefined,
+  /**
+   * The CRE **KeystoneForwarder** on Arc Testnet — the Chainlink contract that delivers DON-attested
+   * workflow reports by calling our `MarkReceiver.onReport`. That on-chain call is the qualifying
+   * Chainlink state change (Connect-the-World). Verified from the CRE Forwarder Directory; chain name
+   * for project.yaml is `"arc-testnet"`.
+   */
+  arcForwarder: "0x76c9cf548b4179F8901cda1f8623568b58215E62" as Address,
+  /** The CRE chain-name string Arc testnet uses in project.yaml / getNetwork. */
+  arcChainName: "arc-testnet",
+} as const;
+
+/** Resolve the Chainlink Data Streams REST host, preferring an env override over the default. */
+export function chainlinkStreamsHost(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return env.CHAINLINK_STREAMS_HOST || CHAINLINK.streamsHost;
+}
+
 // ── Additional oracle fallbacks (live on Arc per Doc 1 §9) ────────────────────────
 // Pyth and RedStone are also available; addresses filled in if/when an adapter is added.
 export const ORACLE_FALLBACKS = {

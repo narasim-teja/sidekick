@@ -79,9 +79,10 @@ HTTP (default port `8787`, override `ENGINE_PORT`):
 - `POST /pay/:market/:account` — the x402 margin-call resource (agents pay here).
 - `ws://…/ws` — the per-block state stream (`{type:"block", state}` frames).
 
-Env: `ENGINE_MARKETS=BTC-PERP,ETH-PERP` (or `all`), `CHECKPOINT_EVERY_BLOCKS=1`,
-`ARC_LOGS_RPC_URL` (a wide-range `eth_getLogs` RPC for the event backfill — defaults to the public
-Arc RPC, which allows 10k-block ranges; free-tier Alchemy caps it at 10).
+Env: `MARKETS=BTC-PERP,ETH-PERP` (or `all`; the same var the deploy script reads),
+`ORACLE_SOURCE` / `ORACLE_SOURCE_<SYMBOL>` (pick `stork` or `chainlink` per market, dash-stripped),
+`CHECKPOINT_EVERY_BLOCKS=1`, `ARC_LOGS_RPC_URL` (a wide-range `eth_getLogs` RPC for the event
+backfill — defaults to the public Arc RPC, which allows 10k-block ranges; free-tier Alchemy caps it at 10).
 
 ---
 

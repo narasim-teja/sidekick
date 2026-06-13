@@ -7,6 +7,11 @@
 import { describe, expect, test } from "bun:test";
 import type { MarkPrice, OracleAdapter } from "@sidekick/shared";
 import { WAD } from "../fixed/units.ts";
+import {
+  CHAINLINK_STALE_MARK_SELECTOR,
+  ChainlinkNotFoundError,
+  isChainlinkNotFound,
+} from "./chainlink.ts";
 import { ResilientOracle } from "./index.ts";
 import {
   isStorkNotFound,
@@ -160,5 +165,116 @@ describe("ResilientOracle", () => {
     await o.getMark(); // read 2 → synthetic, no probe
     await o.getMark(); // read 3 → re-probe (3 % 3 == 0)
     expect(stork.calls()).toBe(2);
+  });
+});
+
+/** A fake Chainlink primary: returns a fixed mark, throws a StaleMark-selector error, or a typed error. */
+function fakeChainlink(behavior: "live" | "stale" | "typed"): {
+  oracle: OracleAdapter;
+  calls: () => number;
+} {
+  let calls = 0;
+  const oracle: OracleAdapter = {
+    source: "chainlink",
+    getMark(): Promise<MarkPrice> {
+      calls += 1;
+      if (behavior === "stale") {
+        // The on-chain ChainlinkAdapter reverts StaleMark() — surfaced by viem as a selector string,
+        // NOT as a non-positive price. This is the regression guard for the crash bug.
+        return Promise.reject(
+          new Error(`execution reverted, data: ${CHAINLINK_STALE_MARK_SELECTOR}`),
+        );
+      }
+      if (behavior === "typed") {
+        return Promise.reject(new ChainlinkNotFoundError("TESTUSD", "not pushed"));
+      }
+      return Promise.resolve({
+        asset: "TESTUSD",
+        price18: 1_675n * WAD,
+        timestampMs: 1_700_000_000_000,
+        source: "chainlink",
+      });
+    },
+  };
+  return { oracle, calls: () => calls };
+}
+
+describe("isChainlinkNotFound", () => {
+  test("matches the StaleMark selector", () => {
+    expect(isChainlinkNotFound(new Error(`reverted, data: ${CHAINLINK_STALE_MARK_SELECTOR}`))).toBe(
+      true,
+    );
+  });
+  test("matches a named StaleMark / FeedMismatch revert string", () => {
+    expect(isChainlinkNotFound(new Error("execution reverted: StaleMark()"))).toBe(true);
+    expect(isChainlinkNotFound(new Error("execution reverted: FeedMismatch()"))).toBe(true);
+  });
+  test("matches a ChainlinkNotFoundError", () => {
+    expect(isChainlinkNotFound(new ChainlinkNotFoundError("ETHUSD", "no value"))).toBe(true);
+  });
+  test("does not match an unrelated RPC error or a Stork NotFound", () => {
+    expect(isChainlinkNotFound(new Error("connection refused"))).toBe(false);
+    expect(isChainlinkNotFound(new StorkNotFoundError("ETHUSD", "no value"))).toBe(false);
+  });
+});
+
+describe("ResilientOracle (Chainlink primary)", () => {
+  test("serves the live Chainlink mark and tags it chainlink-live", async () => {
+    const cl = fakeChainlink("live");
+    const o = new ResilientOracle(
+      "TESTUSD",
+      cl.oracle,
+      new SyntheticOracle("TESTUSD", { source: "chainlink" }),
+      150,
+      isChainlinkNotFound,
+    );
+    const m = await o.getMark();
+    expect(m.provenance).toBe("chainlink-live");
+    expect(m.source).toBe("chainlink");
+    expect(o.isSynthetic).toBe(false);
+    expect(o.primarySource).toBe("chainlink");
+  });
+
+  test("latches to synthetic-fallback on a StaleMark revert (the crash-bug regression guard)", async () => {
+    const cl = fakeChainlink("stale");
+    const o = new ResilientOracle(
+      "TESTUSD",
+      cl.oracle,
+      new SyntheticOracle("TESTUSD", { source: "chainlink" }),
+      150,
+      isChainlinkNotFound,
+    );
+    // Without the StaleMark-aware predicate this would THROW and crash the tick.
+    const m = await o.getMark();
+    expect(m.provenance).toBe("synthetic-fallback");
+    // The synthetic fallback echoes the configured source — never a false "stork".
+    expect(m.source).toBe("chainlink");
+    expect(o.isSynthetic).toBe(true);
+  });
+
+  test("a non-recoverable error still throws (not every error is a feed miss)", async () => {
+    const cl: OracleAdapter = {
+      source: "chainlink",
+      getMark: () => Promise.reject(new Error("connection refused")),
+    };
+    const o = new ResilientOracle(
+      "TESTUSD",
+      cl,
+      new SyntheticOracle("TESTUSD", { source: "chainlink" }),
+      150,
+      isChainlinkNotFound,
+    );
+    await expect(o.getMark()).rejects.toThrow("connection refused");
+  });
+});
+
+describe("SyntheticOracle source honesty", () => {
+  test("echoes the configured source instead of hardcoding stork", async () => {
+    const cl = await new SyntheticOracle("ETHUSD", { source: "chainlink" }).getMark();
+    expect(cl.source).toBe("chainlink");
+    const sk = await new SyntheticOracle("ETHUSD", { source: "stork" }).getMark();
+    expect(sk.source).toBe("stork");
+    const def = await new SyntheticOracle("ETHUSD").getMark();
+    expect(def.source).toBe("stork"); // back-compat default
   });
 });

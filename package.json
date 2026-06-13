@@ -7,7 +7,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "examples"
   ],
   "engines": {
     "bun": ">=1.3.0"
@@ -23,6 +24,8 @@
     "engine": "bun run --filter '@sidekick/engine' dev",
     "fund": "bun run --filter '@sidekick/agents' fund",
     "demo": "bun run --filter '@sidekick/agents' demo",
+    "example": "bun run examples/standalone-agent.ts",
+    "mcp": "bun run --filter '@sidekick/mcp' start",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check --write ."

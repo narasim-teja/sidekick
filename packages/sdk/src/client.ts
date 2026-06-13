@@ -165,15 +165,30 @@ export class SideKick {
 
   // ── Read: own on-chain account ──────────────────────────────────────────────────
 
-  /** Read the live on-chain mark for a market from its oracle adapter (WAD 18dp). */
+  /**
+   * Read the live mark for a market (WAD 18dp). Prefers the on-chain oracle adapter; if that feed is
+   * not pushed on-chain (Stork `NotFound` — true for ETH/SOL/HYPE/LINK on testnet) it falls back to
+   * the engine's current state mark (the synthetic mark the engine is injecting into `checkpoint`).
+   * So the SDK works for synthetic-mark markets too, and an open/close prices at the same mark the
+   * engine's checkpoint uses.
+   */
   async getMarkWad(market: MarketSymbol): Promise<bigint> {
     const adapter = marketDeployment(this.deployment, market).oracleAdapter;
-    const mark = (await this.pub.readContract({
-      address: adapter,
-      abi: ORACLE_ADAPTER_ABI,
-      functionName: "getMark",
-    })) as { price18: bigint; timestampMs: bigint };
-    return mark.price18;
+    try {
+      const mark = (await this.pub.readContract({
+        address: adapter,
+        abi: ORACLE_ADAPTER_ABI,
+        functionName: "getMark",
+      })) as { price18: bigint; timestampMs: bigint };
+      if (mark.price18 > 0n) return mark.price18;
+    } catch {
+      /* feed not pushed on-chain — fall back to the engine's state mark below */
+    }
+    const state = await this.getState(market);
+    if (state) return parseMarkWad(state.mark);
+    throw new Error(
+      `no mark available for ${market} (on-chain feed unpushed and no engine state yet)`,
+    );
   }
 
   /** This account's un-utilized collateral in the Vault (USDC 6dp). */

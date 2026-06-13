@@ -31,11 +31,19 @@ export function loadRootEnv(): void {
       const i = t.indexOf("=");
       if (i === -1) continue;
       const k = t.slice(0, i).trim();
-      if (process.env[k] === undefined) process.env[k] = t.slice(i + 1).trim();
+      if (process.env[k] === undefined) process.env[k] = unquote(t.slice(i + 1).trim());
     }
   } catch {
     /* rely on the ambient env */
   }
+}
+
+/** Strip a single pair of surrounding single/double quotes from an env value (dotenv behavior). */
+function unquote(v: string): string {
+  if (v.length >= 2 && ((v[0] === '"' && v.at(-1) === '"') || (v[0] === "'" && v.at(-1) === "'"))) {
+    return v.slice(1, -1);
+  }
+  return v;
 }
 
 /** The agents' shared seed (env `AGENTS_MNEMONIC`, else the dev seed). */

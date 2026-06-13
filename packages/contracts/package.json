@@ -1,0 +1,19 @@
+{
+  "name": "@sidekick/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "@sidekick/contracts — the Foundry project: all Solidity (MarketRegistry, Vault, Pool, PerpEngine, AccountManager, GapFund — Phase 2) plus the Phase 0 spike contracts and TS spike runners.",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "spike:arc": "bun run spikes/a-arc-deploy.ts",
+    "spike:oracle": "bun run spikes/b-oracle-read.ts",
+    "spike:gateway": "bun run spikes/c-gateway-roundtrip.ts"
+  },
+  "dependencies": {
+    "@circle-fin/x402-batching": "3.0.4",
+    "@sidekick/shared": "workspace:*",
+    "viem": "2.52.2"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@sidekick/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared types, market configs, oracle adapter interface, ABIs, and Arc/Circle/Stork/Chainlink constants for SideKick.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./markets": "./src/markets.ts",
+    "./constants": "./src/constants.ts",
+    "./oracle": "./src/oracle.ts",
+    "./chain": "./src/chain.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "viem": "^2.52.0"
+  },
+  "devDependencies": {
+    "viem": "2.52.2"
+  }
+}

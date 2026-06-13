@@ -1,15 +1,88 @@
 # @sidekick/engine
 
-The off-chain per-block loop — **Layer A** (mark / fund / solvency / decrement compute) and,
-later (Phase 3), **Layer B** (Gateway nanopayment authorizations). In **Phase 1** this package is
-the **economic simulation**: a deterministic, in-memory model of one SideKick market that lets you
-*see* the funding curve, the pool-solvency bound, and continuous decrement behaving — and tune the
-market constants `{m, α, λ, r_max, k}` before any Solidity is written.
+The off-chain per-block loop — **Layer A** (mark / fund / solvency / decrement compute) and
+**Layer B** (Gateway nanopayment authorizations). The package wears two hats:
 
-See `docs/02-PHASED-BUILD-PLAN.md` Phase 1 and `docs/01-PROJECT-AND-ARCHITECTURE.md` §4 (the
-funding + decrement math) for the design this implements.
+- **Phase 1 — economic simulation** (`src/sim`, `src/core`): a deterministic in-memory model in
+  *float*, for the constants sweep. See the "Phase 1 simulation" section below.
+- **Phase 3 — the live engine** (`src/index.ts`, `src/fixed`, `src/chain`, `src/compute`,
+  `src/payments`): a real Hono service that loops against the **deployed Arc venue**, runs the §4.3
+  reconciliation in **fixed point**, triggers the on-chain `checkpoint`, settles Layer B
+  nanopayments, and streams per-block state over WebSocket.
 
-## Run it
+See `docs/02-PHASED-BUILD-PLAN.md` Phase 1 + Phase 3 and `docs/01-PROJECT-AND-ARCHITECTURE.md` §4–§6.
+
+---
+
+## Phase 3 — the live engine
+
+Each ~2s Arc block, for every configured market:
+
+1. **Fetch the mark** through the pluggable oracle (`src/oracle`): the deployed `StorkAdapter`
+   (BTC is live on testnet ≈ $70,627), falling back to a deterministic synthetic mark for assets
+   Stork hasn't pushed (ETH/SOL/HYPE/LINK) — each tick labels its `markProvenance` honestly.
+2. **Read authoritative state** from the venue (`src/chain`): open positions, free collateral, pool
+   capital/exposure, and the carried EMA `smoothSkewPrev`.
+3. **Run the §4.3 reconciliation off-chain** (`src/compute/reconcile.ts`) in **fixed point**
+   (`src/fixed`) — `mark → fund → check → settle → decrement`, the exact ordering and integer
+   arithmetic of `PerpEngine.checkpoint`, so the off-chain prediction equals the on-chain result.
+4. **Record Layer B deltas** (`src/payments/ledger.ts`): the continuous funding stream + answered
+   margin calls (settled via Gateway nanopayments — off-chain EIP-3009/x402 authorizations, not
+   per-payment on-chain txns).
+5. **Trigger the on-chain `checkpoint`** (`src/chain/venue.ts`) at the cadence — the authoritative
+   state transition. Graceful fallback: reconcile every block, checkpoint every N
+   (`CHECKPOINT_EVERY_BLOCKS`), and always reconcile the *newest* block if it falls behind 2s.
+6. **Emit `MarketBlockState`** (`src/state.ts`) over WebSocket + REST for the SDK and dashboard.
+
+### Fixed point — why a second math core
+
+`src/core` (Phase 1) is float; the live loop triggers a *real on-chain checkpoint*, so it must
+compute in the venue's integer units (USDC 6dp + WAD 18dp `bigint`) with the SAME truncating
+division Solidity uses, or the off-chain prediction drifts from on-chain truth (the
+PnL-double-count / conservation class Doc 1 §4.3 warns about). `src/fixed/*` is a **bit-for-bit
+port** of `packages/contracts/src/lib/*`, proven by `src/fixed/parity.test.ts` against a vector
+fixture emitted by `forge script script/GenParityVectors.s.sol` (`bun run gen:parity` in
+`packages/contracts`). Same inputs in → same outputs out, on-chain and off.
+
+### Layer B — the x402 seller
+
+The engine is the *payee* (`src/payments`). It exposes an x402 margin-call resource via Circle's
+`@circle-fin/x402-batching` server middleware (`POST /pay/:market/:account`), so an agent's
+`GatewayClient.pay()` settles a sub-cent margin-call nanopayment against the venue (verified +
+settled against Circle's testnet facilitator, gas-free), which the loop then lands on-chain via
+`answerMarginCall`. This completes the round-trip Spike C left open.
+
+### Run the live engine
+
+```bash
+# Requires a funded PRIVATE_KEY (the checkpoint operator) in the repo-root .env, and the live
+# deployment in @sidekick/shared (already populated for Arc testnet).
+bun run dev                 # the full service: per-block loop + WS stream + REST + x402 seller
+bun run live:open -- --market BTC-PERP --side long --notional 2 --margin 1 --seed 3
+                            # seed the pool (required — OI cap is k·capital) + open a position
+bun run live:tick           # run ONE reconcile tick against Arc + print the state (and checkpoint)
+```
+
+HTTP (default port `8787`, override `ENGINE_PORT`):
+
+- `GET /status` — engine status (markets, operator, cadence, tick counts).
+- `GET /state` / `GET /state/:market` — the latest per-block `MarketBlockState`.
+- `GET /settlement` — the recent Layer B authorization stream.
+- `POST /pay/:market/:account` — the x402 margin-call resource (agents pay here).
+- `ws://…/ws` — the per-block state stream (`{type:"block", state}` frames).
+
+Env: `ENGINE_MARKETS=BTC-PERP,ETH-PERP` (or `all`), `CHECKPOINT_EVERY_BLOCKS=1`,
+`ARC_LOGS_RPC_URL` (a wide-range `eth_getLogs` RPC for the event backfill — defaults to the public
+Arc RPC, which allows 10k-block ranges; free-tier Alchemy caps it at 10).
+
+---
+
+## Phase 1 — economic simulation
+
+The deterministic, in-memory, *float* model of one SideKick market that tunes the constants
+`{m, α, λ, r_max, k}` before any Solidity is written, and doubles as judge evidence.
+
+### Run it
 
 ```bash
 bun run sim                 # run every scenario, print the report + the four §1.3 criteria

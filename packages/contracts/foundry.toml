@@ -11,8 +11,12 @@ optimizer_runs = 200
 # pipeline resolves it and yields better-optimized bytecode. Standard for contracts this dense.
 via_ir = true
 evm_version = "cancun"
-# Allow reading .env-driven paths and the repo root for shared artifacts.
-fs_permissions = [{ access = "read", path = "./" }]
+# Allow reading the repo root for shared artifacts, and writing the parity-vector fixture
+# (GenParityVectors.s.sol emits test/fixtures/parity-vectors.json for the engine's parity test).
+fs_permissions = [
+  { access = "read", path = "./" },
+  { access = "write", path = "./test/fixtures" },
+]
 
 remappings = [
   "forge-std/=lib/forge-std/src/",

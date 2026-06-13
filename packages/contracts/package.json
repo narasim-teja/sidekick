@@ -8,6 +8,7 @@
     "build": "forge build",
     "test": "forge test",
     "gen:params": "bun run script/gen-params.ts",
+    "gen:parity": "ARCSCAN_API_KEY=${ARCSCAN_API_KEY:-x} forge script script/GenParityVectors.s.sol",
     "spike:arc": "bun run spikes/a-arc-deploy.ts",
     "spike:oracle": "bun run spikes/b-oracle-read.ts",
     "spike:gateway": "bun run spikes/c-gateway-roundtrip.ts"

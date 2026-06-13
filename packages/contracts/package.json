@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "@sidekick/contracts — the Foundry project: all Solidity (MarketRegistry, Vault, Pool, PerpEngine, AccountManager, GapFund — Phase 2) plus the Phase 0 spike contracts and TS spike runners.",
+  "description": "@sidekick/contracts — the Foundry project: the Phase 2 venue (MarketRegistry, Vault, Pool [holds the gap fund], LPToken/slpUSDC, PerpEngine, AccountManager) + math libs (SignedWad, Funding, Decrement) plus the Phase 0 spike contracts and TS spike runners.",
   "scripts": {
     "build": "forge build",
     "test": "forge test",
+    "gen:params": "bun run script/gen-params.ts",
     "spike:arc": "bun run spikes/a-arc-deploy.ts",
     "spike:oracle": "bun run spikes/b-oracle-read.ts",
     "spike:gateway": "bun run spikes/c-gateway-roundtrip.ts"

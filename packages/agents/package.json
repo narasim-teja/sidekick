@@ -1,17 +1,26 @@
 {
   "name": "@sidekick/agents",
-  "version": "0.0.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "@sidekick/agents — the autonomous demo agents (long, short, MM, funding-strategy hero, dark) that prove 'agent-to-agent, no human intervention' and drive the demo. Uses @sidekick/sdk. Built in Phase 4.",
+  "description": "@sidekick/agents — the autonomous demo agents (long, short, MM, funding-strategy hero, dark) that prove 'agent-to-agent, no human intervention' and drive the demo. Built on @sidekick/sdk (Doc 2 Phase 4).",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src",
+    "fund": "bun run src/scripts/fund.ts",
+    "demo": "bun run src/orchestrator.ts",
+    "agent:long": "bun run src/agents/long.ts",
+    "agent:short": "bun run src/agents/short.ts",
+    "agent:mm": "bun run src/agents/mm.ts",
+    "agent:funding": "bun run src/agents/funding.ts",
+    "agent:dark": "bun run src/agents/dark.ts"
   },
   "dependencies": {
     "@sidekick/sdk": "workspace:*",
-    "@sidekick/shared": "workspace:*"
+    "@sidekick/shared": "workspace:*",
+    "viem": "2.52.2"
   }
 }

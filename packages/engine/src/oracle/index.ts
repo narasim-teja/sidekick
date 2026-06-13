@@ -79,9 +79,17 @@ export function makeOracle(
   client: PublicClient,
   market: MarketConfig,
   adapterAddress: Address,
+  env: Record<string, string | undefined> = process.env,
 ): ResilientOracle {
   const stork = new StorkOracle(client, adapterAddress, market.asset);
-  const synthetic = new SyntheticOracle(market.asset);
+  // The synthetic fallback's walk is env-tunable so a demo can dial in a visible mark move
+  // (a downward drift makes a high-leverage long decrement legibly on camera, for example).
+  const vol = env.SYNTH_VOL_PER_BLOCK ? Number(env.SYNTH_VOL_PER_BLOCK) : undefined;
+  const drift = env.SYNTH_DRIFT_PER_BLOCK ? Number(env.SYNTH_DRIFT_PER_BLOCK) : undefined;
+  const synthetic = new SyntheticOracle(market.asset, {
+    ...(vol !== undefined ? { volPerBlock: vol } : {}),
+    ...(drift !== undefined ? { driftPerBlock: drift } : {}),
+  });
   return new ResilientOracle(market.asset, stork, synthetic);
 }
 

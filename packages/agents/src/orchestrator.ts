@@ -43,7 +43,7 @@ import type { AgentStep } from "./runner.ts";
 import { SCENARIO } from "./scenario.ts";
 
 /** Liquidity (decimal USDC) the funder seeds the pool with if it is thin (so opens are admitted). */
-const POOL_SEED_USDC = "20";
+const POOL_SEED_USDC = process.env.POOL_SEED_USDC ?? "12";
 
 async function ensurePoolSeeded(market: ReturnType<typeof agentMarket>): Promise<void> {
   const mnemonic = agentsMnemonic();

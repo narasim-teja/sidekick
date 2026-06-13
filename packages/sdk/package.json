@@ -1,16 +1,21 @@
 {
   "name": "@sidekick/sdk",
-  "version": "0.0.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "@sidekick/sdk — the agent-facing TypeScript client: read state, act (open/close/adjust, post/withdraw, answer margin calls), and subscribe to the per-block event stream. The venue from the consumer's POV. (Built out in Phase 5.)",
+  "description": "@sidekick/sdk — the agent-facing TypeScript client: read state, act (open/close, post/withdraw collateral, provide liquidity, answer margin calls), and subscribe to the per-block event stream. The venue from the consumer's POV (Doc 2 Phase 5).",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./keys": "./src/keys.ts",
+    "./abis": "./src/abis.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src"
   },
   "dependencies": {
+    "@circle-fin/x402-batching": "3.0.4",
+    "@sidekick/engine": "workspace:*",
     "@sidekick/shared": "workspace:*",
     "viem": "2.52.2"
   }

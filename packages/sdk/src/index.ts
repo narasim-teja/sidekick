@@ -1,19 +1,59 @@
 /**
- * @sidekick/sdk — agent-facing client for the SideKick venue.
+ * @sidekick/sdk — the agent-facing client for the SideKick venue (Doc 2 Phase 5).
  *
- * Phase 5 builds this out into the full read / act / subscribe / onboard surface
- * (Doc 2 §5.1). For now it re-exports the shared types so consumers have a stable import
- * site, and pins the intended public shape as a reference.
+ * The venue from a consumer's POV: read state, act, subscribe to the per-block stream, onboard, and
+ * answer margin calls as gas-free Gateway nanopayments. A thin ergonomic wrapper over surfaces that
+ * already exist (the deployed Arc contracts + the live engine) — not new infrastructure.
  *
- * Intended surface (Phase 5):
- *   const sk = new SideKick({ network: "arc-testnet" });
- *   await sk.onboard({ depositUSDC: "100" });   // fund Gateway unified balance (+ optional ERC-8004)
- *   sk.on("block", (s) => { ... });              // per-block state push
- *   await sk.open({ market: "ETH-PERP", side: "long", collateral: "20", leverage: 10 });
+ * Quickstart:
+ *
+ *     import { SideKick } from "@sidekick/sdk";
+ *
+ *     const sk = new SideKick({ network: "arc-testnet", privateKey });
+ *     await sk.onboard({ depositUSDC: "100", gatewayUSDC: "20" });   // collateral + Gateway balance
+ *     sk.on("block", (s) => { ...mark, skew, funding, my positions, settlement flow... });
+ *     await sk.open({ market: "ETH-PERP", side: "long", collateral: "20", leverage: 10 });
+ *     await sk.answerMarginCall("ETH-PERP");                          // x402 Gateway nanopayment
+ *
+ * Keys: import from "@sidekick/sdk/keys" to derive a fleet of agent EOAs from one seed.
  */
 
-export type { MarketConfig, MarketSymbol } from "@sidekick/shared";
-export { MARKET_SYMBOLS, MARKETS } from "@sidekick/shared";
+export const SDK_VERSION = "0.5.0" as const;
 
-// Placeholder export so the package is importable before Phase 5 lands the client.
-export const SDK_VERSION = "0.0.0" as const;
+// Convenience re-exports from shared so consumers have one import site.
+export { getMarket, MARKET_SYMBOLS, MARKETS } from "@sidekick/shared";
+// The client.
+export { type BlockHandler, SideKick } from "./client.ts";
+// Key derivation lives at the "@sidekick/sdk/keys" subpath; re-exported here for discoverability.
+export {
+  AGENT_ROLES,
+  type AgentIdentity,
+  type AgentRole,
+  deriveAgent,
+  deriveDemoAgents,
+  deriveFleet,
+  deriveFunder,
+  generateAgentsMnemonic,
+  isLikelyMnemonic,
+} from "./keys.ts";
+export { BlockStream } from "./stream.ts";
+// Public types (re-exporting the engine's state payload + shared market vocabulary).
+export type {
+  AccountView,
+  EngineStatus,
+  MarketBlockState,
+  MarketConfig,
+  MarketParams,
+  MarketSymbol,
+  OnboardOptions,
+  OnboardResult,
+  OpenOptions,
+  PoolState,
+  PositionState,
+  SettlementEvent,
+  Side,
+  SideKickConfig,
+  Signer,
+} from "./types.ts";
+// Unit helpers (decimal-string ⇄ venue integers) for consumers that need them.
+export { formatUsdc, formatWad, notionalFromLeverage, parseMarkWad, parseUsdc } from "./units.ts";

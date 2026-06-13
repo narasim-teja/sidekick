@@ -1,0 +1,13 @@
+{
+  // The Foundry-friendly Solidity extension. It reads remappings.txt + the lib/ layout, so imports
+  // in this package resolve in-editor (unlike the Hardhat-focused NomicFoundation extension, which
+  // expects a hardhat.config and shows red squiggles on Foundry remappings).
+  "recommendations": ["JuanBlanco.solidity"],
+
+  // The Hardhat/Nomic Solidity extension fights the Juan Blanco one (both own .sol). Disable it for
+  // this folder so diagnostics come from the Foundry-aware LSP only.
+  "unwantedRecommendations": [
+    "NomicFoundation.hardhat-solidity",
+    "NomicFoundation.solidity"
+  ]
+}

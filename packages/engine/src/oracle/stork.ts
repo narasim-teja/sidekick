@@ -93,7 +93,12 @@ interface StorkSignedPrice {
   price: string; // quantized value, decimal string, ×1e18
   timestamped_signature: {
     signature: { r: `0x${string}`; s: `0x${string}`; v: `0x${string}` };
-    timestamp: number | string; // nanoseconds (the SIGNED timestamp — use this, not the top-level one)
+    // Nanoseconds — the SIGNED `recvTime` (use this, not the top-level one). This is a 19-digit
+    // integer FAR beyond Number.MAX_SAFE_INTEGER (2^53), so it MUST stay a decimal string: routing
+    // it through `JSON.parse` as a JS number rounds it to float64 and corrupts the low ns digits,
+    // which makes the on-chain `getStorkMessageHashV1` recompute a different hash → InvalidSignature.
+    // {@link parseStorkBody} quotes these numeric literals before parsing so they arrive as strings.
+    timestamp: string;
   };
   publisher_merkle_root: `0x${string}`;
   calculation_alg: { checksum: string }; // hex WITHOUT a 0x prefix
@@ -187,19 +192,49 @@ export async function fetchStorkUpdate(
   if (!res.ok) {
     throw new Error(`Stork REST ${res.status}: ${await res.text().catch(() => res.statusText)}`);
   }
-  const body = (await res.json()) as {
-    data?: Record<string, { stork_signed_price: StorkSignedPrice }>;
-  };
+  // Parse from TEXT with a precision-safe parser — `res.json()` (i.e. JSON.parse) would round the
+  // 19-digit ns `timestamp` to float64 and break the on-chain signature check. See {@link parseStorkBody}.
+  const body = parseStorkBody(await res.text());
   const data = body.data ?? {};
   return Object.values(data).map((entry) => mapSignedPrice(entry.stork_signed_price));
 }
 
-/** Map one REST `stork_signed_price` to the on-chain `TemporalNumericValueInput` tuple (exact pusher mapping). */
+/**
+ * Parse a Stork REST body WITHOUT losing integer precision. Stork's ns timestamps are 19-digit
+ * integers (~2e18), well past JS's `Number.MAX_SAFE_INTEGER` (2^53 ≈ 9e15), so a plain `JSON.parse`
+ * silently rounds them to the nearest float64 — which corrupts the SIGNED `recvTime` and makes the
+ * on-chain `getStorkMessageHashV1` recompute a different hash → `InvalidSignature` on push.
+ *
+ * The fix: quote every bare integer literal with ≥16 digits so it parses as a *string*, preserving
+ * every digit. We only touch JSON numeric tokens (a colon/comma/`[` followed by whitespace then the
+ * digits, then a structural `,`/`}`/`]`), never digits already inside a quoted string (hex prices,
+ * ids), so the regex can't corrupt non-numeric fields. The downstream code reads `timestamp` as a
+ * string and feeds it straight to `BigInt()`, so a quoted value is exactly what we want.
+ */
+export function parseStorkBody(text: string): {
+  data?: Record<string, { stork_signed_price: StorkSignedPrice }>;
+} {
+  // Match a JSON value position (after `:`, `,`, or `[`) holding a bare integer of ≥16 digits, and
+  // wrap it in quotes. The trailing lookahead ensures we stop at a structural char, so we never grab
+  // a partial token. 16 digits is safely above 2^53's 16-digit boundary yet below any real ns ts.
+  const safe = text.replace(/([:,[]\s*)(\d{16,})(\s*[,}\]])/g, '$1"$2"$3');
+  return JSON.parse(safe);
+}
+
+/**
+ * Map one REST `stork_signed_price` to the on-chain `TemporalNumericValueInput` tuple. This matches
+ * the official Go chain-pusher's `getUpdatePayload` field-for-field: `timestampNs ← the SIGNED ns
+ * timestamp`, `quantizedValue ← price` (decimal string), `valueComputeAlgHash ← "0x"+checksum`.
+ *
+ * `sig.timestamp` MUST already be a string here ({@link parseStorkBody} guarantees it) — `BigInt(str)`
+ * is exact, whereas `BigInt(jsonParsedNumber)` would carry the float64 rounding error that breaks the
+ * on-chain signature verification.
+ */
 export function mapSignedPrice(p: StorkSignedPrice): TemporalNumericValueInput {
   const sig = p.timestamped_signature;
   return {
     temporalNumericValue: {
-      timestampNs: BigInt(sig.timestamp), // the SIGNED ns timestamp
+      timestampNs: BigInt(sig.timestamp), // the SIGNED ns timestamp (precision-preserved string)
       quantizedValue: BigInt(p.price), // int192, ×1e18
     },
     id: p.encoded_asset_id,

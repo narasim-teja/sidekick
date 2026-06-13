@@ -8,7 +8,13 @@ import { describe, expect, test } from "bun:test";
 import type { MarkPrice, OracleAdapter } from "@sidekick/shared";
 import { WAD } from "../fixed/units.ts";
 import { ResilientOracle } from "./index.ts";
-import { isStorkNotFound, StorkNotFoundError, type StorkOracle } from "./stork.ts";
+import {
+  isStorkNotFound,
+  mapSignedPrice,
+  parseStorkBody,
+  StorkNotFoundError,
+  type StorkOracle,
+} from "./stork.ts";
 import { SyntheticOracle } from "./synthetic.ts";
 
 describe("SyntheticOracle", () => {
@@ -39,6 +45,42 @@ describe("SyntheticOracle", () => {
     expect(m.price18).toBeGreaterThan(0n);
     // LINK anchor ~18 → price18 on the order of 18e18.
     expect(m.price18 / WAD).toBeGreaterThan(1n);
+  });
+});
+
+describe("parseStorkBody (precision-safe ns timestamp)", () => {
+  // A real 19-digit Stork ns timestamp, far past Number.MAX_SAFE_INTEGER (2^53 ≈ 9.0e15).
+  const TS = "1781381678635405199";
+
+  test("preserves the full 19-digit ns timestamp (plain JSON.parse would corrupt it)", () => {
+    const raw = `{"data":{"BTCUSD":{"stork_signed_price":{"encoded_asset_id":"0xabc","price":"64220734239124991000000","timestamped_signature":{"signature":{"r":"0x1","s":"0x2","v":"0x1b"},"timestamp":${TS}},"publisher_merkle_root":"0xdef","calculation_alg":{"checksum":"9be7"}}}}}`;
+    // Sanity: the naive path really does lose precision (this is the bug we are guarding against).
+    expect(
+      BigInt(JSON.parse(raw).data.BTCUSD.stork_signed_price.timestamped_signature.timestamp),
+    ).not.toBe(BigInt(TS));
+    // The fix keeps every digit by quoting the bare integer before parsing.
+    const body = parseStorkBody(raw);
+    const ts = body.data?.BTCUSD?.stork_signed_price.timestamped_signature.timestamp;
+    expect(ts).toBe(TS);
+    expect(BigInt(ts as string)).toBe(BigInt(TS));
+  });
+
+  test("does not disturb quoted string fields (hex ids / decimal price strings)", () => {
+    const raw = `{"data":{"BTCUSD":{"stork_signed_price":{"encoded_asset_id":"0x7404e3d104ea7841c3d9e6fd20adfe99b4ad586bc08d8f3bd3afef894cf184de","price":"64220734239124991000000","timestamped_signature":{"signature":{"r":"0x1","s":"0x2","v":"0x1c"},"timestamp":${TS}},"publisher_merkle_root":"0x1f1e30","calculation_alg":{"checksum":"9be7e9f9"}}}}}`;
+    const p = parseStorkBody(raw).data?.BTCUSD?.stork_signed_price;
+    expect(p?.price).toBe("64220734239124991000000"); // long decimal string untouched
+    expect(p?.encoded_asset_id).toBe(
+      "0x7404e3d104ea7841c3d9e6fd20adfe99b4ad586bc08d8f3bd3afef894cf184de",
+    );
+  });
+
+  test("mapSignedPrice carries the exact signed ns timestamp into the on-chain tuple", () => {
+    const raw = `{"data":{"BTCUSD":{"stork_signed_price":{"encoded_asset_id":"0xabc","price":"64220734239124991000000","timestamped_signature":{"signature":{"r":"0x1","s":"0x2","v":"0x1c"},"timestamp":${TS}},"publisher_merkle_root":"0xdef","calculation_alg":{"checksum":"9be7"}}}}}`;
+    const input = mapSignedPrice(parseStorkBody(raw).data!.BTCUSD!.stork_signed_price);
+    expect(input.temporalNumericValue.timestampNs).toBe(BigInt(TS));
+    expect(input.temporalNumericValue.quantizedValue).toBe(64220734239124991000000n);
+    expect(input.valueComputeAlgHash).toBe("0x9be7"); // checksum gets the 0x prefix
+    expect(input.v).toBe(28); // "0x1c" → 28
   });
 });
 

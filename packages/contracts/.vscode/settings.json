@@ -1,0 +1,32 @@
+{
+  // Solidity LSP config for the Juan Blanco "Solidity" extension, used IF you open packages/contracts
+  // as its own workspace root. (When the monorepo root is the workspace, the active config is the one
+  // at ../../.vscode/settings.json with root-relative remapping paths.)
+  //
+  // The contracts compile cleanly with `forge build` (solc 0.8.28); these keep the editor on the same
+  // compiler + remappings so imports resolve and the pragma version matches.
+
+  // Pin the compiler to foundry.toml's solc — otherwise the extension uses its bundled "latest"
+  // (0.8.35), newer than `pragma solidity 0.8.28` → "requires different compiler version" error.
+  "solidity.compileUsingRemoteVersion": "v0.8.28+commit.7893614a",
+  "solidity.defaultCompiler": "remote",
+
+  // Foundry project layout: sources in src/, dependencies vendored under lib/.
+  "solidity.packageDefaultDependenciesContractsDirectory": "src",
+  "solidity.packageDefaultDependenciesDirectory": "lib",
+
+  // Match foundry.toml so editor diagnostics align with the real build.
+  "solidity.compilerOptimization": 200,
+  "solidity.evmVersion": "cancun",
+
+  // Mirror foundry.toml [remappings] / remappings.txt (paths relative to this package root).
+  "solidity.remappings": [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@storknetwork/stork-evm-sdk/=lib/stork-evm-sdk/",
+    "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/",
+    "halmos-cheatcodes/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/",
+    "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+    "stork-evm-sdk/=lib/stork-evm-sdk/"
+  ]
+}

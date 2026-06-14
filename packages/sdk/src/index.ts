@@ -21,7 +21,16 @@
 export const SDK_VERSION = "0.5.0" as const;
 
 // Convenience re-exports from shared so consumers have one import site.
-export { getMarket, MARKET_SYMBOLS, MARKETS } from "@sidekick/shared";
+export {
+  agentNamespacedId,
+  ERC8004_MAINNET,
+  ERC8004_TESTNET,
+  type Erc8004Registries,
+  erc8004For,
+  getMarket,
+  MARKET_SYMBOLS,
+  MARKETS,
+} from "@sidekick/shared";
 // The client.
 export { type BlockHandler, SideKick } from "./client.ts";
 // Key derivation lives at the "@sidekick/sdk/keys" subpath; re-exported here for discoverability.
@@ -40,6 +49,7 @@ export { BlockStream } from "./stream.ts";
 // Public types (re-exporting the engine's state payload + shared market vocabulary).
 export type {
   AccountView,
+  Broadcaster,
   EngineStatus,
   MarketBlockState,
   MarketConfig,

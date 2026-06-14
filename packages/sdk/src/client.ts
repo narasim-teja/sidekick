@@ -20,16 +20,21 @@
  * @see packages/engine/src/state.ts (the WS/REST payload) · src/payments/routes.ts (the x402 seller)
  */
 
-import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { GatewayClient, registerBatchScheme } from "@circle-fin/x402-batching/client";
 import {
   ARC,
   ARC_TESTNET_DEPLOYMENT,
+  agentNamespacedId,
   arcTestnet,
+  ERC8004_AGENT_WALLET_SET_TYPES,
+  ERC8004_IDENTITY_EIP712_DOMAIN,
+  erc8004For,
   type MarketSymbol,
   marketDeployment,
   marketId as marketIdOf,
   rpcUrl as sharedRpcUrl,
 } from "@sidekick/shared";
+import { x402Client, x402HTTPClient } from "@x402/core/client";
 import {
   type Account,
   type Address,
@@ -38,6 +43,7 @@ import {
   createWalletClient,
   type Hex,
   http,
+  keccak256,
   type PublicClient,
   type Transport,
   type WalletClient,
@@ -46,14 +52,18 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   ACCOUNT_MANAGER_ABI,
   erc20Abi,
+  GATEWAY_WALLET_ABI,
+  IDENTITY_REGISTRY_ABI,
   ORACLE_ADAPTER_ABI,
   PERP_ENGINE_ABI,
   POOL_ABI,
+  REPUTATION_REGISTRY_ABI,
   VAULT_ABI,
 } from "./abis.ts";
 import { BlockStream } from "./stream.ts";
 import type {
   AccountView,
+  Broadcaster,
   MarketBlockState,
   OnboardOptions,
   OnboardResult,
@@ -67,8 +77,33 @@ const SIDES = ["flat", "long", "short"] as const;
 /** The Gateway chain alias for Arc testnet (the `@circle-fin/x402-batching` SDK's first-class name). */
 const GATEWAY_CHAIN = "arcTestnet" as const;
 
+/** Circle GatewayWallet on Arc testnet — `deposit(token,value)` funds the unified balance (from `CHAIN_CONFIGS.arcTestnet`). */
+const GATEWAY_WALLET_ADDRESS = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9" as const;
+
 /** A block-stream subscriber callback. */
 export type BlockHandler = (state: MarketBlockState) => void;
+
+/** The engine `/pay` resource's JSON body (same on the 402-challenge passthrough and the settled 200). */
+interface PayBody {
+  settled?: boolean;
+  reason?: string;
+  amount?: string;
+  transaction?: string;
+}
+
+/** The EIP-712 typed-data the Circle batch scheme asks the signer to sign (matches `@circle-fin/x402-batching`'s `BatchEvmSigner`). */
+interface BatchEvmSignTypedDataParams {
+  domain: { name: string; version: string; chainId: number; verifyingContract: Hex };
+  types: Record<string, { name: string; type: string }[]>;
+  primaryType: string;
+  message: Record<string, unknown>;
+}
+
+/** The minimal signer the Circle batch x402 scheme needs — satisfied by a viem `Account`/wallet. */
+interface BatchEvmSigner {
+  address: Hex;
+  signTypedData: (params: BatchEvmSignTypedDataParams) => Promise<Hex>;
+}
 
 export class SideKick {
   /** The signing account (EOA). */
@@ -85,6 +120,8 @@ export class SideKick {
   private readonly privateKey?: Hex;
   private stream?: BlockStream;
   private gatewayInstance?: GatewayClient;
+  private x402HttpInstance?: x402HTTPClient;
+  private readonly broadcaster?: Broadcaster;
 
   constructor(config: SideKickConfig) {
     if (config.network && config.network !== "arc-testnet") {
@@ -92,6 +129,7 @@ export class SideKick {
     }
     this.account = config.account ?? privateKeyToAccount(config.privateKey as Hex);
     this.privateKey = config.privateKey;
+    this.broadcaster = config.broadcaster;
     this.address = this.account.address;
     this.engineUrl = (config.engineUrl ?? "http://localhost:8787").replace(/\/$/, "");
     this.wsUrl = config.wsUrl ?? `${this.engineUrl.replace(/^http/, "ws")}/ws`;
@@ -257,23 +295,7 @@ export class SideKick {
     const value = parseUsdc(amount);
     const usdc = this.deployment.usdc;
     const vault = this.deployment.vault;
-    const allowance = (await this.pub.readContract({
-      address: usdc,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [this.address, vault],
-    })) as bigint;
-    if (allowance < value) {
-      const approveTx = await this.wallet.writeContract({
-        address: usdc,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [vault, value],
-        chain: this.chain,
-        account: this.account,
-      });
-      await this.pub.waitForTransactionReceipt({ hash: approveTx });
-    }
+    await this.approveIfNeeded(usdc, vault, value);
     return this.write(vault, VAULT_ABI, "deposit", [value]);
   }
 
@@ -356,12 +378,14 @@ export class SideKick {
     reason?: string;
   }> {
     const url = `${this.engineUrl}/pay/${market}/${this.address}`;
-    const { data } = await this.gatewayClient().pay<{
-      settled?: boolean;
-      reason?: string;
-      amount?: string;
-      transaction?: string;
-    }>(url, { method: "POST" });
+    // Two signer paths, same x402 batch scheme + same gas-free EIP-3009 authorization:
+    //   • raw privateKey → Circle's convenience `GatewayClient.pay()`.
+    //   • viem/external/Circle-Wallet `account` (no raw key) → the lower-level x402 handshake driven
+    //     by `registerBatchScheme({ signer })`. This is what makes the headline flow signer-only, so a
+    //     real agent never has to hand over (or even materialize) a private key.
+    const data = this.privateKey
+      ? (await this.gatewayClient().pay<PayBody>(url, { method: "POST" })).data
+      : await this.payViaSigner(url);
     return {
       settled: Boolean(data?.settled),
       amount: data?.amount,
@@ -382,36 +406,218 @@ export class SideKick {
 
   /**
    * Onboard the account in one pass (Doc 2 §5.1 "Onboard"): fund the Gateway unified balance (the
-   * off-chain balance nanopayments draw against), post Vault trading collateral, and optionally link
-   * an ERC-8004 identity. Each step is skipped if its option is absent. Idempotent-ish: depositing
-   * twice just adds more.
+   * off-chain balance nanopayments draw against), post Vault trading collateral, and optionally
+   * establish an ERC-8004 identity — either link an existing `identityId` or `registerIdentity` to
+   * mint a fresh one on Arc's canonical registry. Each step is skipped if its option is absent.
+   * Idempotent-ish: depositing twice just adds more.
    */
   async onboard(opts: OnboardOptions = {}): Promise<OnboardResult> {
     const out: OnboardResult = { address: this.address };
     if (opts.gatewayUSDC) {
-      const dep = await this.gatewayClient().deposit(opts.gatewayUSDC);
-      out.gatewayDepositTx = dep.depositTxHash;
+      out.gatewayDepositTx = await this.gatewayDeposit(opts.gatewayUSDC);
     }
     if (opts.depositUSDC) {
       out.vaultDepositTx = await this.deposit(opts.depositUSDC);
       await this.pub.waitForTransactionReceipt({ hash: out.vaultDepositTx });
     }
     if (opts.identityId !== undefined) {
-      out.identityTx = await this.write(
-        this.deployment.accountManager,
-        ACCOUNT_MANAGER_ABI,
-        "linkIdentity",
-        [opts.identityId],
-      );
+      out.identityTx = await this.linkIdentity(opts.identityId);
+    } else if (opts.registerIdentity) {
+      const id = await this.registerAgent();
+      out.agentId = id.agentId;
+      out.identityTx = id.linkTx;
     }
     return out;
   }
 
+  // ── ERC-8004 identity (the real registry, not a stored number) ───────────────────
+
+  /**
+   * Register this account as an **ERC-8004 agent** on Arc's canonical Identity Registry, then mirror
+   * the minted `agentId` into the venue's AccountManager so the unified-account view carries it.
+   *
+   * Unlike the old `linkIdentity(arbitraryNumber)` stub, this mints a real, on-chain identity NFT:
+   * `register()` on the Identity Registry assigns an `agentId` to `this.address` and sets the agent's
+   * payee `agentWallet` to `this.address` by default — i.e. the same EOA that answers margin calls is
+   * the canonical, reputation-bearing identity. Returns the minted `agentId` (read from the ERC-721
+   * `Transfer(0x0, owner, agentId)` event) and the tx hashes.
+   *
+   * Costs USDC gas (a real mint). `link: false` skips the in-venue AccountManager link (registry-only).
+   */
+  async registerAgent(opts: { link?: boolean } = {}): Promise<{
+    agentId: bigint;
+    registerTx: Hex;
+    linkTx?: Hex;
+  }> {
+    const registry = this.erc8004.identity;
+    const registerTx = await this.write(registry, IDENTITY_REGISTRY_ABI, "register", []);
+    const receipt = await this.pub.waitForTransactionReceipt({ hash: registerTx });
+    const agentId = this.agentIdFromReceipt(receipt, registry);
+    let linkTx: Hex | undefined;
+    if (opts.link !== false) linkTx = await this.linkIdentity(agentId);
+    return { agentId, registerTx, linkTx };
+  }
+
+  /**
+   * Mirror an already-minted `agentId` into the venue's AccountManager (the in-venue link the
+   * unified-account view reads). Separate from {@link registerAgent} so an agent that registered
+   * elsewhere can still link. This is the only thing the old `onboard({identityId})` did.
+   */
+  async linkIdentity(agentId: bigint): Promise<Hex> {
+    return this.write(this.deployment.accountManager, ACCOUNT_MANAGER_ABI, "linkIdentity", [
+      agentId,
+    ]);
+  }
+
+  /**
+   * Bind a *different* payee wallet to an agentId (e.g. point reputation/payments at a Circle Wallet
+   * while a hot EOA registered). The ERC-8004 Identity Registry requires the **new wallet** to prove
+   * control via an EIP-712 signature; this method produces that signature with the SDK's signer
+   * (so the SDK must be constructed AS the new wallet) and submits it. `deadlineSeconds` bounds the
+   * signature's validity from now.
+   */
+  async setAgentWallet(agentId: bigint, deadlineSeconds = 3600): Promise<Hex> {
+    const registry = this.erc8004.identity;
+    const owner = (await this.pub.readContract({
+      address: registry,
+      abi: IDENTITY_REGISTRY_ABI,
+      functionName: "ownerOf",
+      args: [agentId],
+    })) as Address;
+    const latest = await this.pub.getBlock();
+    const deadline = latest.timestamp + BigInt(deadlineSeconds);
+    const signature = await this.wallet.signTypedData({
+      account: this.account,
+      domain: {
+        name: ERC8004_IDENTITY_EIP712_DOMAIN.name,
+        version: ERC8004_IDENTITY_EIP712_DOMAIN.version,
+        chainId: this.chainId,
+        verifyingContract: registry,
+      },
+      types: ERC8004_AGENT_WALLET_SET_TYPES,
+      primaryType: "AgentWalletSet",
+      message: { agentId, newWallet: this.address, owner, deadline },
+    });
+    return this.write(registry, IDENTITY_REGISTRY_ABI, "setAgentWallet", [
+      agentId,
+      this.address,
+      deadline,
+      signature,
+    ]);
+  }
+
+  /**
+   * This account's ERC-8004 identity as the venue sees it: the in-venue linked `agentId` (0 if
+   * unlinked), and — when linked — the canonical payee `agentWallet` and the portable namespaced id
+   * `eip155:<chainId>:<registry>/<agentId>` an external system resolves reputation by.
+   */
+  async agentIdentity(): Promise<{
+    agentId: bigint;
+    linked: boolean;
+    agentWallet?: Address;
+    namespacedId?: string;
+  }> {
+    const agentId = (await this.pub.readContract({
+      address: this.deployment.accountManager,
+      abi: ACCOUNT_MANAGER_ABI,
+      functionName: "identityOf",
+      args: [this.address],
+    })) as bigint;
+    if (agentId === 0n) return { agentId, linked: false };
+    const agentWallet = (await this.pub.readContract({
+      address: this.erc8004.identity,
+      abi: IDENTITY_REGISTRY_ABI,
+      functionName: "getAgentWallet",
+      args: [agentId],
+    })) as Address;
+    return {
+      agentId,
+      linked: true,
+      agentWallet,
+      namespacedId: agentNamespacedId(this.chainId, this.erc8004.identity, agentId),
+    };
+  }
+
+  // ── ERC-8004 reputation (proof-of-payment — the discover→pay→record loop) ────────
+
+  /**
+   * Record a settled margin-call **Nanopayment** as on-chain ERC-8004 reputation feedback for an
+   * agent — the "record" leg of the agentic loop (discover via `venue` → pay gas-free → record here).
+   * Writes a positive feedback entry to the Reputation Registry tagged `sidekick` / `margin-call`,
+   * with `feedbackHash = keccak256(txHash)` as the on-chain proof-of-payment anchor (the ERC-8004
+   * spec's `proofOfPayment.txHash` lives in the off-chain feedback file this hash commits to).
+   *
+   * Who calls this: the **venue/engine** is the natural attester (it observed the settlement), but any
+   * holder of a SideKick client can record feedback about an agentId. `value` defaults to 1 (a single
+   * successful payment); pass a count to batch. Costs USDC gas (a real on-chain write).
+   */
+  async recordPayment(
+    agentId: bigint,
+    proof: { txHash: Hex; market?: MarketSymbol; value?: number; feedbackURI?: string },
+  ): Promise<Hex> {
+    return this.write(this.erc8004.reputation, REPUTATION_REGISTRY_ABI, "giveFeedback", [
+      agentId,
+      BigInt(proof.value ?? 1), // int128 value
+      0, // valueDecimals
+      "sidekick", // tag1
+      proof.market ? `margin-call:${proof.market}` : "margin-call", // tag2
+      this.engineUrl, // endpoint
+      proof.feedbackURI ?? "", // feedbackURI (off-chain feedback file, optional)
+      keccak256(proof.txHash), // feedbackHash — proof-of-payment anchor (keccak of the settle txHash)
+    ]);
+  }
+
+  /**
+   * An agent's running ERC-8004 reputation summary from the Reputation Registry: how many feedback
+   * entries and the aggregate value (optionally filtered to specific client attesters / tags). Lets a
+   * counterparty resolve "how trustworthy is this agent" before transacting.
+   */
+  async reputationSummary(
+    agentId: bigint,
+    opts: { clients?: Address[]; tag1?: string; tag2?: string } = {},
+  ): Promise<{ count: bigint; value: bigint; valueDecimals: number }> {
+    const [count, value, valueDecimals] = (await this.pub.readContract({
+      address: this.erc8004.reputation,
+      abi: REPUTATION_REGISTRY_ABI,
+      functionName: "getSummary",
+      args: [agentId, opts.clients ?? [], opts.tag1 ?? "", opts.tag2 ?? ""],
+    })) as [bigint, bigint, number];
+    return { count, value, valueDecimals };
+  }
+
+  /** The ERC-8004 registry addresses for this chain (Identity + Reputation). */
+  get erc8004() {
+    return erc8004For(this.chainId);
+  }
+
+  /** Read the minted ERC-721 `agentId` from a `register()` receipt's `Transfer(0x0, owner, id)` log. */
+  private agentIdFromReceipt(
+    receipt: { logs: Array<{ address: string; topics: readonly Hex[]; data: Hex }> },
+    registry: Address,
+  ): bigint {
+    const TRANSFER_TOPIC =
+      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" as const; // keccak Transfer(address,address,uint256)
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== registry.toLowerCase()) continue;
+      // ERC-721 Transfer: topics = [sig, from(indexed), to(indexed), tokenId(indexed)]
+      if (log.topics.length === 4 && log.topics[0] === TRANSFER_TOPIC) {
+        const from = BigInt(log.topics[1] as Hex);
+        if (from === 0n) return BigInt(log.topics[3] as Hex); // mint (from == address(0))
+      }
+    }
+    throw new Error("register() succeeded but no ERC-721 mint event was found in the receipt");
+  }
+
   /**
    * The underlying Circle `GatewayClient` (buyer side) for this account — read balances, deposit, or
-   * pay directly. Lazily constructed; requires a `privateKey` (the Gateway SDK takes a raw key, so
-   * accounts constructed from an external signer cannot use the Gateway path — pass `privateKey` if
-   * you need nanopayments).
+   * pay directly. Lazily constructed.
+   *
+   * Note: Circle's high-level `GatewayClient` is constructed from a raw key, so this convenience
+   * accessor requires the SDK to have been built with `privateKey`. This is a *wrapper* constraint,
+   * not a protocol one — the gas-free nanopayment (`answerMarginCall`) works from an external/KMS/
+   * Circle-Wallet signer too, because the underlying x402 batch scheme signs with any
+   * `{ address, signTypedData }` (see {@link answerMarginCall}). Use `privateKey` only if you need
+   * this raw `GatewayClient` handle (e.g. direct `deposit`).
    */
   gateway(): GatewayClient {
     return this.gatewayClient();
@@ -423,14 +629,36 @@ export class SideKick {
     return { available: b.gateway.available, formatted: b.gateway.formattedAvailable };
   }
 
+  /**
+   * Fund this account's Gateway unified balance (what margin-call Nanopayments draw against). Works
+   * **signer-only** — no raw key required: it's `USDC.approve(GatewayWallet)` + `GatewayWallet.deposit`,
+   * both ordinary contract writes signed by the wallet client. (When constructed with a `privateKey` it
+   * uses Circle's convenience `GatewayClient.deposit`, which is identical on-chain.) `amount` is decimal
+   * USDC. Returns the deposit tx hash. This is the deposit half of "Gateway is signer-only end-to-end".
+   */
+  async gatewayDeposit(amount: string): Promise<Hex> {
+    if (this.privateKey) {
+      const dep = await this.gatewayClient().deposit(amount);
+      return dep.depositTxHash as Hex;
+    }
+    const value = parseUsdc(amount);
+    const usdc = this.deployment.usdc;
+    await this.approveIfNeeded(usdc, GATEWAY_WALLET_ADDRESS, value);
+    return this.write(GATEWAY_WALLET_ADDRESS, GATEWAY_WALLET_ABI, "deposit", [usdc, value]);
+  }
+
   // ── internals ────────────────────────────────────────────────────────────────────
 
   private gatewayClient(): GatewayClient {
     if (this.gatewayInstance === undefined) {
       if (!this.privateKey) {
+        // Only the raw `GatewayClient` handle (direct deposit / balance) needs a raw key — its
+        // constructor takes one. The gas-free margin-call flow does NOT: it goes through
+        // `payViaSigner` with the account's signer. So this is a narrow constraint, not the headline.
         throw new Error(
-          "Gateway nanopayments require a `privateKey` (the @circle-fin/x402-batching SDK signs with a raw key). " +
-            "Construct SideKick with `privateKey` to use answerMarginCall / Gateway deposit.",
+          "The raw Circle GatewayClient handle (deposit / getBalances) needs a `privateKey` — its " +
+            "constructor takes one. answerMarginCall works without it (signer-only). Construct " +
+            "SideKick with `privateKey` only if you need direct gateway().deposit(...).",
         );
       }
       this.gatewayInstance = new GatewayClient({
@@ -441,9 +669,92 @@ export class SideKick {
     return this.gatewayInstance;
   }
 
+  /**
+   * Answer the x402 margin-call resource using the account's **signer** (no raw key) — the signer-only
+   * twin of `GatewayClient.pay()`. Builds an x402 HTTP client registered with the Circle batch scheme
+   * (`registerBatchScheme({ signer })`), then runs the 402 → sign → retry handshake by hand:
+   *   1. POST the resource → expect HTTP 402 with the Circle Gateway batching payment requirements,
+   *   2. `createPaymentPayload(...)` signs an EIP-3009 authorization off-chain via `this.account`,
+   *   3. re-POST with the encoded `X-PAYMENT` header → the engine verifies + settles → 200 body.
+   * The signer is any `{ address, signTypedData }`, which a viem `Account` (or a Circle Wallet
+   * adapter) satisfies — so this is gas-free and key-exposure-free.
+   */
+  private async payViaSigner(url: string): Promise<PayBody> {
+    const http = this.x402Http();
+    const first = await fetch(url, { method: "POST" });
+    if (first.status !== 402) {
+      // The engine returns 200 directly when nothing is owed (no 402 challenge) — pass that through.
+      return (await this.safeJson(first)) as PayBody;
+    }
+    const paymentRequired = http.getPaymentRequiredResponse(
+      (name) => first.headers.get(name),
+      await this.safeJson(first),
+    );
+    const payload = await http.createPaymentPayload(paymentRequired);
+    const headers = http.encodePaymentSignatureHeader(payload);
+    const paid = await fetch(url, { method: "POST", headers });
+    return (await this.safeJson(paid)) as PayBody;
+  }
+
+  /** Lazily build the x402 HTTP client bound to this account's signer + the Circle batch scheme. */
+  private x402Http(): x402HTTPClient {
+    if (this.x402HttpInstance === undefined) {
+      const client = new x402Client();
+      registerBatchScheme(client, { signer: this.batchSigner() });
+      this.x402HttpInstance = new x402HTTPClient(client);
+    }
+    return this.x402HttpInstance;
+  }
+
+  /**
+   * A `BatchEvmSigner` (`{ address, signTypedData }`) backed by this account. Routes `signTypedData`
+   * through the wallet client so it works for a local viem `Account`, a JSON-RPC account, or a Circle
+   * Wallet adapter alike — the exact seam that lets the Gateway flow be signer-only. The param shape
+   * is the EIP-712 typed-data the Circle batch scheme passes; viem's `signTypedData` takes the same.
+   */
+  private batchSigner(): BatchEvmSigner {
+    return {
+      address: this.address,
+      signTypedData: (params: BatchEvmSignTypedDataParams) =>
+        this.wallet.signTypedData({ account: this.account, ...params }),
+    };
+  }
+
+  /** Parse a fetch Response as JSON, tolerating an empty/non-JSON body (returns {}). */
+  private async safeJson(res: Response): Promise<unknown> {
+    try {
+      return await res.json();
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Ensure `spender` is approved for at least `value` of `token`, then wait until it's effective.
+   * Routes through {@link write} so it uses the broadcaster (Circle) or the viem wallet as configured.
+   * In broadcaster mode `write` already returns a CONFIRMED tx; in viem mode we wait for the receipt.
+   */
+  private async approveIfNeeded(token: Address, spender: Address, value: bigint): Promise<void> {
+    const allowance = (await this.pub.readContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [this.address, spender],
+    })) as bigint;
+    if (allowance >= value) return;
+    const tx = await this.write(token, erc20Abi, "approve", [spender, value]);
+    if (!this.broadcaster) await this.pub.waitForTransactionReceipt({ hash: tx });
+  }
+
   /** Send a contract write and return its hash (no wait — callers wait if they need confirmation). */
   // biome-ignore lint/suspicious/noExplicitAny: viem ABI generics over a union of our hand-written ABIs.
   private async write(address: Address, abi: any, functionName: string, args: any[]): Promise<Hex> {
+    // Circle (or any custodial) mode: hand the structured call to the broadcaster, which signs +
+    // broadcasts via Circle's transaction API (abiFunctionSignature + abiParameters) and returns the
+    // on-chain txHash. Default mode: the viem wallet client signs with `this.account` + broadcasts.
+    if (this.broadcaster) {
+      return this.broadcaster.write({ to: address, abi, functionName, args });
+    }
     return this.wallet.writeContract({
       address,
       abi,

@@ -7,16 +7,21 @@
   "exports": {
     ".": "./src/index.ts",
     "./keys": "./src/keys.ts",
-    "./abis": "./src/abis.ts"
+    "./abis": "./src/abis.ts",
+    "./circle": "./src/circle-account.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test src"
+    "test": "bun test src",
+    "verify:circle": "bun run scripts/verify-circle.ts",
+    "circle:wallets": "bun run scripts/create-sidekick-wallets.ts"
   },
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "10.6.0",
     "@circle-fin/x402-batching": "3.0.4",
     "@sidekick/engine": "workspace:*",
     "@sidekick/shared": "workspace:*",
+    "@x402/core": "2.15.0",
     "viem": "2.52.2"
   }
 }

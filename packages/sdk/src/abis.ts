@@ -165,6 +165,131 @@ export const ACCOUNT_MANAGER_ABI = [
   },
 ] as const;
 
+/**
+ * Circle GatewayWallet — `deposit(token, value)` moves USDC into the caller's Gateway unified balance
+ * (the off-chain balance margin-call nanopayments draw against). Same call Circle's `GatewayClient`
+ * makes, but signed by our wallet client so an external/Circle-Wallet signer can fund Gateway with no
+ * raw key. ABI taken verbatim from `@circle-fin/x402-batching`'s bundled `GATEWAY_WALLET_ABI`.
+ */
+export const GATEWAY_WALLET_ABI = [
+  {
+    type: "function",
+    name: "deposit",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "value", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/**
+ * ERC-8004 Identity Registry — the canonical on-chain agent identity (an ERC-721 per agent). We use
+ * the no-arg `register()` (mints an agentId to `msg.sender`, with `agentWallet` defaulting to the
+ * caller), `setAgentWallet` (bind a *different* payee wallet with an EIP-712 proof from that wallet),
+ * and the reads. Signatures verified against the deployed `IdentityRegistryUpgradeable`.
+ */
+export const IDENTITY_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "register",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ name: "agentId", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "register",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "agentURI", type: "string" }],
+    outputs: [{ name: "agentId", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "setAgentURI",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "newURI", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setAgentWallet",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "newWallet", type: "address" },
+      { name: "deadline", type: "uint256" },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "getAgentWallet",
+    stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "ownerOf",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "tokenURI",
+    stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }],
+    outputs: [{ type: "string" }],
+  },
+] as const;
+
+/**
+ * ERC-8004 Reputation Registry — on-chain feedback keyed by agentId. SideKick writes a settled
+ * margin-call nanopayment as a proof-of-payment feedback record (closing the discover→pay→record
+ * loop), and reads an agent's running summary.
+ */
+export const REPUTATION_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "giveFeedback",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "value", type: "int128" },
+      { name: "valueDecimals", type: "uint8" },
+      { name: "tag1", type: "string" },
+      { name: "tag2", type: "string" },
+      { name: "endpoint", type: "string" },
+      { name: "feedbackURI", type: "string" },
+      { name: "feedbackHash", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "getSummary",
+    stateMutability: "view",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "clientAddresses", type: "address[]" },
+      { name: "tag1", type: "string" },
+      { name: "tag2", type: "string" },
+    ],
+    outputs: [
+      { name: "count", type: "uint64" },
+      { name: "summaryValue", type: "int128" },
+      { name: "summaryValueDecimals", type: "uint8" },
+    ],
+  },
+] as const;
+
 /** IOracleAdapter.getMark() → Mark{ int256 price18; uint64 timestampMs } — read the live mark for a tx. */
 export const ORACLE_ADAPTER_ABI = [
   {

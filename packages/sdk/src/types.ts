@@ -10,6 +10,29 @@
 
 import type { Account, Hex } from "viem";
 
+/**
+ * How the SDK BROADCASTS on-chain writes (open/close/deposit/approve/…). Default is the viem wallet
+ * client (the account signs + the SDK broadcasts). A **Circle developer-controlled wallet** can't
+ * return a viem-broadcastable signed tx — Circle broadcasts via its own API — so the Circle path
+ * supplies a `Broadcaster` that hands the structured call to Circle and returns the on-chain txHash.
+ * This is the seam that makes full Circle-MPC custody work end-to-end (writes + signing), no raw key.
+ */
+export interface Broadcaster {
+  /**
+   * Broadcast a contract call and return the on-chain tx hash once it lands. Receives the structured
+   * call (abi + function + args) — not pre-encoded calldata — because Circle's developer-controlled
+   * API takes `abiFunctionSignature` + `abiParameters`, the proven path for EOA wallets on Arc.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: abi/args are a union over the SDK's hand-written ABIs.
+  write(params: {
+    to: Hex;
+    abi: any;
+    functionName: string;
+    args: any[];
+    value?: bigint;
+  }): Promise<Hex>;
+}
+
 // The engine's state payload — the contract with consumers (WS `block` frames + REST).
 export type {
   EngineStatus,
@@ -51,6 +74,13 @@ export type SideKickConfig = Signer & {
   wsUrl?: string;
   /** Override the chain RPC URL (otherwise the shared Arc default / env). */
   rpcUrl?: string;
+  /**
+   * How on-chain writes are broadcast. Omit for the default viem wallet-client path (the `account`
+   * signs and the SDK broadcasts). Pass a {@link Broadcaster} (e.g. from `circleBroadcaster`) to route
+   * writes through Circle's developer-controlled transaction API — required when the signer is a Circle
+   * MPC wallet, which can't return a viem-broadcastable signed tx.
+   */
+  broadcaster?: Broadcaster;
 };
 
 /** Options for opening a position. Provide `notional` directly, or `collateral`+`leverage` sugar. */
@@ -82,8 +112,18 @@ export interface OnboardOptions {
    * balance margin-call nanopayments draw against (Doc 1 §5 Layer B). Omit to skip.
    */
   gatewayUSDC?: string;
-  /** Optional ERC-8004 identity token id to link to the account (Doc 1 §8). */
+  /**
+   * Link an already-minted ERC-8004 `agentId` to the account in the venue (Doc 1 §8). Use this if the
+   * agent registered elsewhere. To mint a fresh identity in the same onboard pass, use
+   * {@link registerIdentity} instead (mutually exclusive; `identityId` wins if both are set).
+   */
   identityId?: bigint;
+  /**
+   * Register this account as a real ERC-8004 agent on Arc's canonical Identity Registry during
+   * onboarding (mints an identity NFT, costs USDC gas), then link the minted `agentId` in-venue.
+   * Mutually exclusive with {@link identityId}.
+   */
+  registerIdentity?: boolean;
 }
 
 /** The outcome of an onboarding pass — which steps ran + their tx hashes. */
@@ -92,6 +132,8 @@ export interface OnboardResult {
   vaultDepositTx?: Hex;
   gatewayDepositTx?: Hex;
   identityTx?: Hex;
+  /** The ERC-8004 agentId minted, if `registerIdentity` was set. */
+  agentId?: bigint;
 }
 
 /** A consumer's own account view in one market (joined from on-chain reads). */

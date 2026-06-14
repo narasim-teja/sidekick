@@ -7,7 +7,14 @@
  * Run: `bun run src/scripts/onboard.ts [--only long,funding] [--dry]`. Requires AGENTS_MNEMONIC.
  */
 
-import { AGENT_ROLES, type AgentRole, deriveDemoAgents, formatUsdc, parseUsdc, SideKick } from "@sidekick/sdk";
+import {
+  AGENT_ROLES,
+  type AgentRole,
+  deriveDemoAgents,
+  formatUsdc,
+  parseUsdc,
+  SideKick,
+} from "@sidekick/sdk";
 import { ARC_TESTNET_DEPLOYMENT, arcTestnet, rpcUrl } from "@sidekick/shared";
 import { createPublicClient, erc20Abi, http } from "viem";
 import { agentsMnemonic, engineUrl, hasFlag, loadRootEnv } from "../config.ts";
@@ -52,14 +59,20 @@ async function main(): Promise<void> {
     }
     if (dry) continue;
 
-    const sk = new SideKick({ network: "arc-testnet", privateKey: id.privateKey, engineUrl: engineUrl() });
+    const sk = new SideKick({
+      network: "arc-testnet",
+      privateKey: id.privateKey,
+      engineUrl: engineUrl(),
+    });
     try {
       const res = await sk.onboard({
         depositUSDC: p.vaultUSDC,
         gatewayUSDC: p.gatewayUSDC !== "0" ? p.gatewayUSDC : undefined,
       });
-      if (res.vaultDepositTx) console.log(`  ✓ vault deposit ${p.vaultUSDC} (${res.vaultDepositTx})`);
-      if (res.gatewayDepositTx) console.log(`  ✓ gateway deposit ${p.gatewayUSDC} (${res.gatewayDepositTx})`);
+      if (res.vaultDepositTx)
+        console.log(`  ✓ vault deposit ${p.vaultUSDC} (${res.vaultDepositTx})`);
+      if (res.gatewayDepositTx)
+        console.log(`  ✓ gateway deposit ${p.gatewayUSDC} (${res.gatewayDepositTx})`);
     } catch (err) {
       console.log(`  ✗ onboard failed: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
     }

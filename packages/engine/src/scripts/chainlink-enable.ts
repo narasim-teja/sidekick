@@ -25,8 +25,8 @@ import {
   marketId as marketIdOf,
 } from "@sidekick/shared";
 import { type Address, decodeAbiParameters, getContract, type Hex } from "viem";
-import { operatorAccount, operatorWallet, publicClient } from "../chain/clients.ts";
 import { ORACLE_ADAPTER_ABI } from "../chain/abis.ts";
+import { operatorAccount, operatorWallet, publicClient } from "../chain/clients.ts";
 
 loadRootEnv();
 
@@ -119,31 +119,43 @@ async function fetchLivePrice(feedId: Hex): Promise<{ price18: bigint; observedM
 async function main(): Promise<void> {
   const market = arg("market", "LINK-PERP") as MarketSymbol;
   const feedSymbol = arg("feed-symbol", "LINK/USD");
-  const feedId = (process.env[`CHAINLINK_FEED_${market.replace(/-/g, "")}`] as Hex) || FEED_IDS[feedSymbol];
+  const feedId =
+    (process.env[`CHAINLINK_FEED_${market.replace(/-/g, "")}`] as Hex) || FEED_IDS[feedSymbol];
   if (!feedId) throw new Error(`no feed id for ${market} / ${feedSymbol}`);
 
   const pub = publicClient();
   const wallet = operatorWallet();
   const owner = operatorAccount().address;
   const registry = ARC_TESTNET_DEPLOYMENT.marketRegistry;
-  const verifier = (process.env.CHAINLINK_VERIFIER as Address) || "0x0000000000000000000000000000000000000000";
-  const feeToken = (process.env.CHAINLINK_FEE_TOKEN as Address) || "0x0000000000000000000000000000000000000000";
+  const verifier =
+    (process.env.CHAINLINK_VERIFIER as Address) || "0x0000000000000000000000000000000000000000";
+  const feeToken =
+    (process.env.CHAINLINK_FEE_TOKEN as Address) || "0x0000000000000000000000000000000000000000";
 
   console.log(`── Enable native Chainlink leg for ${market} (${feedSymbol}) ──`);
   console.log(`  owner/deployer: ${owner}`);
   console.log(`  registry:       ${registry}`);
   console.log(`  feedId:         ${feedId}`);
-  console.log(`  verifier:       ${verifier === "0x0000000000000000000000000000000000000000" ? "address(0) → RELAY MODE" : verifier}\n`);
+  console.log(
+    `  verifier:       ${verifier === "0x0000000000000000000000000000000000000000" ? "address(0) → RELAY MODE" : verifier}\n`,
+  );
 
   // 1. Pull the live price BEFORE deploying, so we fail fast on bad creds.
   console.log("  fetching live Data Streams price…");
   const { price18, observedMs } = await fetchLivePrice(feedId);
-  console.log(`  ✓ live ${feedSymbol} = $${(Number(price18) / 1e18).toLocaleString()} (observed ${Math.round((Date.now() - observedMs) / 1000)}s ago)\n`);
+  console.log(
+    `  ✓ live ${feedSymbol} = $${(Number(price18) / 1e18).toLocaleString()} (observed ${Math.round((Date.now() - observedMs) / 1000)}s ago)\n`,
+  );
 
   // 2. Deploy the ChainlinkAdapter from the compiled artifact.
   const artifact = JSON.parse(
     readFileSync(
-      fileURLToPath(new URL("../../../contracts/out/ChainlinkAdapter.sol/ChainlinkAdapter.json", import.meta.url)),
+      fileURLToPath(
+        new URL(
+          "../../../contracts/out/ChainlinkAdapter.sol/ChainlinkAdapter.json",
+          import.meta.url,
+        ),
+      ),
       "utf8",
     ),
   );
@@ -171,12 +183,22 @@ async function main(): Promise<void> {
   });
   await pub.waitForTransactionReceipt({ hash: seedHash });
   // Read it back through the same getMark() the engine uses.
-  const mark = (await pub.readContract({ address: adapter, abi: ORACLE_ADAPTER_ABI, functionName: "getMark" })) as {
+  const mark = (await pub.readContract({
+    address: adapter,
+    abi: ORACLE_ADAPTER_ABI,
+    functionName: "getMark",
+  })) as {
     price18: bigint;
     timestampMs: bigint;
   };
-  const src = await pub.readContract({ address: adapter, abi: ORACLE_ADAPTER_ABI, functionName: "source" });
-  console.log(`  ✓ getMark() → $${(Number(mark.price18) / 1e18).toLocaleString()}  source()="${src}"\n`);
+  const src = await pub.readContract({
+    address: adapter,
+    abi: ORACLE_ADAPTER_ABI,
+    functionName: "source",
+  });
+  console.log(
+    `  ✓ getMark() → $${(Number(mark.price18) / 1e18).toLocaleString()}  source()="${src}"\n`,
+  );
 
   // 4. Repoint the registry so the market's oracle is now this adapter.
   console.log("  repointing the registry (setOracle)…");
@@ -194,8 +216,12 @@ async function main(): Promise<void> {
   console.log("✅ Chainlink leg enabled on-chain. Next:");
   console.log(`   1. Set ${market} oracleAdapter in packages/shared/src/deployments.ts to:`);
   console.log(`        ${adapter}`);
-  console.log(`   2. Run the engine with: MARKETS=${market} ORACLE_SOURCE_${market.replace(/-/g, "")}=chainlink`);
-  console.log(`   (the mark is relay-seeded; re-run this script or wire a refresh to keep it fresh)`);
+  console.log(
+    `   2. Run the engine with: MARKETS=${market} ORACLE_SOURCE_${market.replace(/-/g, "")}=chainlink`,
+  );
+  console.log(
+    `   (the mark is relay-seeded; re-run this script or wire a refresh to keep it fresh)`,
+  );
   // Keep getContract imported for any follow-up tooling.
   void getContract;
   process.exit(0);
@@ -211,7 +237,11 @@ function loadRootEnv(): void {
       if (i === -1) continue;
       const k = t.slice(0, i).trim();
       let v = t.slice(i + 1).trim();
-      if (v.length >= 2 && ((v[0] === '"' && v.at(-1) === '"') || (v[0] === "'" && v.at(-1) === "'"))) v = v.slice(1, -1);
+      if (
+        v.length >= 2 &&
+        ((v[0] === '"' && v.at(-1) === '"') || (v[0] === "'" && v.at(-1) === "'"))
+      )
+        v = v.slice(1, -1);
       if (process.env[k] === undefined) process.env[k] = v;
     }
   } catch {

@@ -37,9 +37,8 @@ import {
 // ── tiny CLI / env helpers (no deps) ──────────────────────────────────────────────────
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
-  return i !== -1 && process.argv[i + 1] && !process.argv[i + 1]!.startsWith("--")
-    ? (process.argv[i + 1] as string)
-    : fallback;
+  const next = i !== -1 ? process.argv[i + 1] : undefined;
+  return next && !next.startsWith("--") ? next : fallback;
 }
 function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
@@ -65,7 +64,9 @@ function pickMarket(markets: VenueMarketDescriptor[], prefer?: string): VenueMar
   // Prefer a market whose mark is a real on-chain oracle value (stork-live OR chainlink-live) over a
   // synthetic fallback. Matching `-live` keeps this source-agnostic as more sources are added.
   const live = markets.find((m) => m.live?.markProvenance?.endsWith("-live"));
-  return live ?? markets[0]!;
+  const chosen = live ?? markets[0];
+  if (!chosen) throw new Error("the venue exposes no markets");
+  return chosen;
 }
 
 /**

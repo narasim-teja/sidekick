@@ -1,20 +1,85 @@
 # @sidekick/web — observability dashboard (Phase 7)
 
 The human-facing, **read-only** dashboard. It visualizes the per-block loop made visible —
-**not** a candlestick trading chart.
+**not** a candlestick trading chart. Next.js 15 (App Router, static export) + Tailwind v4 +
+three.js, with a distinctive "mission-control" visual identity.
 
-Built in **Phase 7** (Next.js + Tailwind + shadcn/ui), live against testnet via the engine's
-WebSocket stream. Panels (Doc 2 §7.1):
+The hero is a **three.js settlement network**: a central pool node ringed by the live agent
+nodes, with every settlement event flying between them as a colored **packet** — the
+"thousands of sub-cent payments per block" claim made literal. Magenta packets are the x402
+Gateway **nanopayment** (the headline), amber is the funding stream, cyan is an in-checkpoint
+auto-settle.
 
-- **Per-market:** live mark, skew-vs-cap gauge, funding rate (convex curve), OI long/short.
-- **Settlement stream:** the per-block margin-call + funding nanopayments firing, agent ↔ pool.
-- **Positions table:** each agent's position, margin status, live decrement when the dark agent goes silent.
-- **Pool health:** pool capital / LP claim value as the **stable headline**, with live settlement
-  flow shown **separately and clearly labeled** (Ostium-style, so operational swings ≠ PnL).
-- **Agent view:** each demo agent's ERC-8004 identity, strategy, and activity.
+## Panels (Doc 2 §7.1)
 
-The hero screen: the funding-strategy agent holding pure funding exposure + the dark agent
-decrementing smoothly — the two visuals that prove the thesis.
+- **Hero** — the 3D settlement network + the funding-strategy "hero" and dark-agent statuses.
+- **Market** — live mark, the convex funding curve `clamp(α·S·|S|, ±r_max)` with the live skew
+  marked on it, exposure-vs-the-Layer-2-cap gauge, OI long/short.
+- **Settlement stream** — the per-block nanopayment console, the three `kind`s labelled
+  distinctly so the Gateway nanopayment reads apart from internal contract moves.
+- **Positions** — each agent's position, margin status, and the live **decrement** (the
+  no-liquidation proof: `N′ = E / m`, a smooth trim toward zero, never a cliff).
+- **Pool health** — pool capital / LP claim value as the **stable headline**, with settlement
+  flow shown **separately** (Ostium-style, so operational swings are never read as PnL).
+- **Agents** — each demo agent's role, strategy, and Arcscan-linked identity.
 
-This directory is an intentional placeholder until Phase 7 to avoid premature dependency drift;
-`next` is initialized here when the dashboard work begins.
+## Data source — live engine, with a graceful replay fallback
+
+The dashboard is a pure client of the engine's REST + WebSocket surface
+(`packages/engine`). It:
+
+1. Bootstraps from `GET /state` + `/status` + `/venue`, then subscribes to `/ws` for the
+   per-block `{type:"block", state}` push.
+2. If the engine is unreachable within ~2.5s, it transparently falls back to a **deterministic
+   demo replay** — a faithful in-browser model of the venue math (the §4.1 convex funding,
+   §4.2 decrement, conservation) that follows the Doc 3 §11 demo arc. A cold URL is **never
+   blank**; the mode is badged `LIVE` / `REPLAY` in the header.
+
+There is one source of truth (the feed); every panel reads it. The browser bundle pulls in no
+server packages — the engine's payload types are mirrored locally in `src/lib/types.ts`.
+
+## Run
+
+```bash
+# from the repo root, with the engine running for LIVE data:
+bun run engine          # packages/engine — the live per-block loop (REST :8787 + /ws)
+bun run demo            # packages/agents — drives the five demo agents (optional)
+
+# the dashboard:
+cd apps/web
+bun run dev             # http://localhost:3000  (LIVE if the engine is up, else REPLAY)
+```
+
+With no engine running, `bun run dev` still shows the full dashboard in **REPLAY** mode.
+
+## Configuration (env)
+
+All `NEXT_PUBLIC_*` and inlined at build time (static export):
+
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_ENGINE_URL` | `http://localhost:8787` | Engine REST base. |
+| `NEXT_PUBLIC_ENGINE_WS` | derived from the URL (`http→ws` + `/ws`) | WS stream URL. |
+| `NEXT_PUBLIC_AGENTS` | — | Optional JSON `{address: role}` map to label a custom live fleet. The default dev-mnemonic demo agents are recognized out-of-the-box. |
+
+## Deploy (Vercel or any static host)
+
+The app is a **static export** (`output: "export"` → `out/`), so it deploys anywhere:
+
+```bash
+bun run build           # → apps/web/out (static)
+# Vercel: set the project root to apps/web; framework "Next.js"; it serves the export.
+```
+
+For a hosted deploy, set `NEXT_PUBLIC_ENGINE_URL` (and `NEXT_PUBLIC_ENGINE_WS`) to your hosted
+engine. Until the engine is hosted, a deployed URL runs in REPLAY mode — still a complete,
+self-contained demo.
+
+## Notes
+
+- **WebGL fallback.** If WebGL can't initialize (headless capture, locked-down GPU), the hero
+  falls back to an SVG version of the same network — never a blank or broken panel.
+- **No hydration risk.** Live data is client-only; the data grid renders behind a `mounted`
+  gate so SSR and the first client render agree.
+- Source of truth for the data contract: `packages/engine/src/state.ts` (mirrored in
+  `src/lib/types.ts`). Re-mirror if the engine payload changes shape.

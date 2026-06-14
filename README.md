@@ -83,7 +83,8 @@ Chainlink, swappable per-market.
 ## Monorepo layout
 
 Bun workspaces. TypeScript + Bun runtime, Hono for services, Foundry for contracts, Next.js +
-Tailwind + shadcn/ui for the dashboard, viem for chain interaction.
+Tailwind v4 + three.js for the dashboard (custom "mission-control" UI; no component-library
+dependency), viem for chain interaction.
 
 ```
 sidekick/
@@ -100,7 +101,8 @@ sidekick/
 ├─ examples/                           — copy-pasteable agent examples (standalone-agent.ts)
 ├─ AGENTS.md                           — the single agent-facing reference (read this to integrate)
 └─ apps/
-   └─ web/         @sidekick/web       — read-only observability dashboard (Phase 7)
+   └─ web/         @sidekick/web       — read-only observability dashboard (Phase 7) ✅
+                                          (3D settlement network; live engine + replay fallback)
 ```
 
 ## How to run
@@ -135,9 +137,19 @@ bun run spike:gateway      # Gateway nanopayment round-trip (@circle-fin/x402-ba
 See [`packages/contracts/spikes/README.md`](packages/contracts/spikes/README.md) for what each
 spike confirms and the live results.
 
+```bash
+# 6. run the live venue + the observability dashboard
+bun run engine             # the per-block loop (REST :8787 + WS /ws)
+bun run demo               # (optional) drive the five autonomous demo agents
+bun run web                # the dashboard → http://localhost:3000
+#   the dashboard shows LIVE data when the engine is up; with no engine it falls back to a
+#   deterministic in-browser replay of the venue math, so it is never blank.
+```
+
 ## Build status
 
-**Phases 0–3 complete. The Arc + Circle spine is live end-to-end.**
+**Phases 0–7 complete. The Arc + Circle spine is live end-to-end, the Chainlink CRE workflow is
+proven live, and the observability dashboard is built.**
 
 - **Phase 0 — scaffold + spikes: ✅.** Monorepo wired; `@sidekick/shared` seeded with the five
   markets + pluggable oracle adapter + constants; all three spikes pass live on Arc (deploy + USDC
@@ -158,13 +170,26 @@ spike confirms and the live results.
   engine tests + 72 contract tests green. See `packages/engine/README.md` for the full surface
   and the live scripts (`bun run live:open`, `bun run live:tick`).
 
+- **Phase 4 — demo agents: ✅.** `packages/agents` ships the five archetypes (long, short, MM,
+  funding-strategy hero, dark) as pure policies driven by an autonomous runner over the SDK's WS
+  stream. `bun run fund` onboards the fleet; `bun run demo` runs the scripted scenario.
+- **Phase 5 — SDK + onboarding: ✅.** `@sidekick/sdk` — the agent-facing read / act / subscribe /
+  onboard client; the demo agents are its first consumer.
+- **Phase 6 — Chainlink CRE (primary $6k bounty): ✅ proven live on Arc.** `packages/cre` — one CRE
+  workflow delivers a real Data Streams LINK/USD mark on-chain (DON → KeystoneForwarder →
+  `MarkReceiver.onReport`) and a second drives the authoritative `checkpoint` through
+  `CheckpointSettler`. Committed tx hashes + evidence in `packages/cre/evidence/`.
+- **Phase 7 — observability dashboard: ✅.** `apps/web` (Next.js + Tailwind v4 + three.js) — the
+  per-block loop made visible: a 3D settlement network, the convex funding curve, the nanopayment
+  stream, smooth decrement, pool health. Live against the engine's WS/REST, with a deterministic
+  in-browser replay fallback so a cold URL is never blank. `bun run web`.
+
 > **For contributors / agents:** the live contract addresses + the venue's unit conventions (USDC
 > 6dp, mark/params WAD 18dp) are the source of truth in `packages/shared`. Note: a pool must be
 > seeded with LP capital before any position can open (the Layer-2 OI cap is `k·capital`, so a
 > 0-capital pool admits nothing) — `bun run live:open` does the seed + open in one step.
 
-**Next:** Phase 4 demo agents · Phase 5 SDK · Phase 6 Chainlink CRE (primary bounty) · Phase 7
-dashboard.
+**Next:** Phase 8 — polish, deploy, submit (architecture diagram, demo video, bounty write-ups).
 
 ## Build an agent
 

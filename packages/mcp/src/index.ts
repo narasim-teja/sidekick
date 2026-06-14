@@ -1,35 +1,60 @@
 #!/usr/bin/env bun
+
 /**
  * @sidekick/mcp entry point — runs the SideKick MCP server over stdio (the transport MCP clients
- * like Claude Desktop spawn). Reads the trading key + engine URL from the environment, builds the
- * server (all venue tools), and connects.
+ * like Claude Desktop spawn). Resolves the trading signer from the environment, builds the server
+ * (all venue tools), and connects.
  *
- * Run directly: `SIDEKICK_PRIVATE_KEY=0x… bun run src/index.ts` (or `bun run mcp` from the root).
- * Configure in an MCP client by pointing it at this file as the command, with `SIDEKICK_PRIVATE_KEY`
- * (and optional `ENGINE_URL`) in the env — see README.md.
+ * Signer resolution (Circle-first): if `CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID`
+ * are set, the server signs through a **Circle developer-controlled wallet** (MPC custody — no raw key
+ * in the process; trades + answers margin calls). Otherwise it falls back to a raw `SIDEKICK_PRIVATE_KEY`
+ * EOA. Optional `ENGINE_URL` (default `http://localhost:8787`).
+ *
+ * Run directly: `CIRCLE_API_KEY=… CIRCLE_ENTITY_SECRET=… CIRCLE_WALLET_ID=… bun run src/index.ts`
+ * (or `SIDEKICK_PRIVATE_KEY=0x… …`). Configure the same env in an MCP client — see README.md.
  *
  * stdout is reserved for the JSON-RPC protocol; all logs go to stderr.
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SideKick } from "@sidekick/sdk";
+import { circleSigner } from "@sidekick/sdk/circle";
 import { buildServer, MCP_VERSION } from "./server.ts";
 
 async function main(): Promise<void> {
-  const privateKey = process.env.SIDEKICK_PRIVATE_KEY as `0x${string}` | undefined;
-  if (!privateKey) {
+  const engineUrl = process.env.ENGINE_URL;
+  const { CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_ID, SIDEKICK_PRIVATE_KEY } =
+    process.env;
+
+  let server: ReturnType<typeof buildServer>;
+  let signerLabel: string;
+
+  if (CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET && CIRCLE_WALLET_ID) {
+    // Circle developer-controlled wallet: MPC custody, no raw key in this process.
+    const { account, broadcaster } = await circleSigner({
+      apiKey: CIRCLE_API_KEY,
+      entitySecret: CIRCLE_ENTITY_SECRET,
+      walletId: CIRCLE_WALLET_ID,
+    });
+    const sk = new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl });
+    server = buildServer({ client: sk });
+    signerLabel = `Circle wallet ${sk.address}`;
+  } else if (SIDEKICK_PRIVATE_KEY) {
+    server = buildServer({ privateKey: SIDEKICK_PRIVATE_KEY as `0x${string}`, engineUrl });
+    signerLabel = "raw key (SIDEKICK_PRIVATE_KEY)";
+  } else {
     console.error(
-      "[sidekick-mcp] SIDEKICK_PRIVATE_KEY is required (a funded Arc-testnet EOA). " +
-        "Set it in the MCP client's env for this server.",
+      "[sidekick-mcp] no signer configured. Set a Circle wallet (CIRCLE_API_KEY + " +
+        "CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID) or a raw SIDEKICK_PRIVATE_KEY in the MCP client's env.",
     );
     process.exit(1);
   }
-  const engineUrl = process.env.ENGINE_URL;
-  const server = buildServer({ privateKey, engineUrl });
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Logs to stderr only — stdout is the JSON-RPC channel.
   console.error(
-    `[sidekick-mcp] v${MCP_VERSION} ready on stdio (engine ${engineUrl ?? "http://localhost:8787"})`,
+    `[sidekick-mcp] v${MCP_VERSION} ready on stdio (signer: ${signerLabel}, engine ${engineUrl ?? "http://localhost:8787"})`,
   );
 }
 

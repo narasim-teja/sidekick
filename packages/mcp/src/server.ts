@@ -7,9 +7,11 @@
  * calling tools, with no SDK code of its own. It's a thin adapter: each tool builds the right
  * `SideKick` call, runs it, and returns a compact JSON text result the model can reason over.
  *
- * One account per server process: the operator's key comes from `SIDEKICK_PRIVATE_KEY` (an Arc-testnet
- * EOA funded with USDC — also the gas token). The engine URL comes from `ENGINE_URL`
- * (default `http://localhost:8787`). Keep the key in the MCP client's env, never in tool args.
+ * One account per server process. The signer is resolved in {@link main} (index.ts), preferring a
+ * **Circle developer-controlled wallet** (`CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID`
+ * — MPC custody, no raw key in the process) and falling back to a raw `SIDEKICK_PRIVATE_KEY` EOA. The
+ * engine URL comes from `ENGINE_URL` (default `http://localhost:8787`). Keep secrets in the MCP
+ * client's env, never in tool args.
  *
  * @see ../../sdk/src/client.ts (the wrapped surface) · ../../../AGENTS.md (the agent reference)
  */
@@ -20,14 +22,19 @@ import { z } from "zod";
 
 export const MCP_VERSION = "0.1.0" as const;
 
-/** Config for {@link buildServer}: how the MCP server signs + which engine it talks to. */
+/**
+ * Config for {@link buildServer}: the constructed {@link SideKick} client to serve. `main` (index.ts)
+ * builds it from a Circle wallet or a raw key — buildServer stays sync + signer-agnostic so it's
+ * trivially testable with an injected client. A raw `privateKey` is still accepted as a convenience
+ * (the SDK builds the client) for the fallback / test paths.
+ */
 export interface McpConfig {
-  /** The trading account's private key (Arc-testnet EOA). Read from `SIDEKICK_PRIVATE_KEY` in {@link main}. */
-  privateKey: `0x${string}`;
-  /** The engine REST/WS base URL. Defaults to `http://localhost:8787`. */
-  engineUrl?: string;
-  /** Inject a client (tests). If absent one is built from `privateKey`/`engineUrl`. */
+  /** A pre-built client (Circle-backed or otherwise) — the production path. */
   client?: SideKick;
+  /** Fallback: a raw private key the SDK builds a client from (if `client` is absent). */
+  privateKey?: `0x${string}`;
+  /** The engine REST/WS base URL (only used with `privateKey`). Defaults to `http://localhost:8787`. */
+  engineUrl?: string;
 }
 
 /** A market-symbol zod enum built from the shared market list, so the tool schema can't drift. */
@@ -55,13 +62,17 @@ function fail(err: unknown): {
  * can construct it with an injected client and exercise the tools without a transport.
  */
 export function buildServer(config: McpConfig): McpServer {
-  const sk =
-    config.client ??
-    new SideKick({
+  let sk = config.client;
+  if (!sk) {
+    if (!config.privateKey) {
+      throw new Error("buildServer requires either `client` or `privateKey`");
+    }
+    sk = new SideKick({
       network: "arc-testnet",
       privateKey: config.privateKey,
       engineUrl: config.engineUrl,
     });
+  }
 
   const server = new McpServer({ name: "sidekick", version: MCP_VERSION });
 

@@ -9,7 +9,7 @@
  */
 
 import type { AgentRole } from "@sidekick/sdk";
-import { agentMarket, loadRootEnv, usingDevMnemonic } from "./config.ts";
+import { agentMarket, loadRootEnv } from "./config.ts";
 import { buildAgent } from "./factory.ts";
 
 export async function runOne(role: AgentRole): Promise<void> {
@@ -18,12 +18,9 @@ export async function runOne(role: AgentRole): Promise<void> {
   const agent = await buildAgent(role, { market });
 
   console.log(`── SideKick agent: ${role} ──`);
-  console.log(`  address: ${agent.address}`);
+  console.log(`  address: ${agent.address} (Circle MPC wallet)`);
   console.log(`  market:  ${market}`);
   console.log(`  engine:  ${agent.sk.engineUrl}`);
-  if (usingDevMnemonic()) {
-    console.log("  ⚠ using the public DEV mnemonic — set AGENTS_MNEMONIC for a real run.");
-  }
   console.log("  starting loop (Ctrl-C to stop)…\n");
 
   agent.runner.start();

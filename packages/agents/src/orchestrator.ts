@@ -9,8 +9,8 @@
  *   1. (`--fund`) onboard the agents first (delegates to the fund script's logic) — optional; skip if
  *      you already ran `bun run fund`.
  *   2. Ensure the market pool is seeded — a 0-capital pool admits no trades (Layer-2 cap = k·capital),
- *      so the funder provides liquidity if the pool is thin.
- *   3. Build all five agents (each its own HD-derived EOA + SideKick client) and start their loops on
+ *      so the `funding`-role Circle wallet provides liquidity if the pool is thin.
+ *   3. Build all five agents (each signing through its own Circle MPC wallet) and start their loops on
  *      the shared per-block WS stream.
  *   4. Narrate: print a compact per-block line (mark, skew, funding rate, pool exposure vs cap) plus
  *      each agent's action, so the scenario reads clearly in the terminal alongside the dashboard.
@@ -21,33 +21,25 @@
 import {
   AGENT_ROLES,
   type AgentRole,
-  deriveFunder,
   formatUsdc,
   type MarketBlockState,
   parseUsdc,
-  SideKick,
 } from "@sidekick/sdk";
 import { POOL_ABI } from "@sidekick/sdk/abis";
 import { ARC_TESTNET_DEPLOYMENT, arcTestnet, marketDeployment, rpcUrl } from "@sidekick/shared";
 import { createPublicClient, http } from "viem";
-import {
-  agentMarket,
-  agentsMnemonic,
-  engineUrl,
-  hasFlag,
-  loadRootEnv,
-  usingDevMnemonic,
-} from "./config.ts";
+import { agentMarket, circleSkForRole, engineUrl, hasFlag, loadRootEnv } from "./config.ts";
 import { type BuiltAgent, buildAgent } from "./factory.ts";
 import type { AgentStep } from "./runner.ts";
 import { SCENARIO } from "./scenario.ts";
+
+/** The role whose Circle wallet seeds the pool (it's funded as part of the fleet). */
+const POOL_SEED_ROLE: AgentRole = "funding";
 
 /** Liquidity (decimal USDC) the funder seeds the pool with if it is thin (so opens are admitted). */
 const POOL_SEED_USDC = process.env.POOL_SEED_USDC ?? "12";
 
 async function ensurePoolSeeded(market: ReturnType<typeof agentMarket>): Promise<void> {
-  const mnemonic = agentsMnemonic();
-  const funder = deriveFunder(mnemonic);
   const chain = arcTestnet();
   const pub = createPublicClient({ chain, transport: http(rpcUrl()) });
   const pool = marketDeployment(ARC_TESTNET_DEPLOYMENT, market).pool;
@@ -60,13 +52,12 @@ async function ensurePoolSeeded(market: ReturnType<typeof agentMarket>): Promise
     console.log(`  pool ${market} already seeded (capital ${formatUsdc(capital)} USDC)`);
     return;
   }
-  console.log(`  seeding pool ${market} with ${POOL_SEED_USDC} USDC as the funder…`);
-  const sk = new SideKick({
-    network: "arc-testnet",
-    privateKey: funder.privateKey,
-    engineUrl: engineUrl(),
-  });
-  // The funder must have free collateral in the Vault first.
+  // Seed from the funding-role Circle wallet (funded as part of the fleet) — no raw key.
+  const sk = await circleSkForRole(POOL_SEED_ROLE);
+  console.log(
+    `  seeding pool ${market} with ${POOL_SEED_USDC} USDC from the ${POOL_SEED_ROLE} Circle wallet (${sk.address})…`,
+  );
+  // The seeding wallet must have free collateral in the Vault first.
   const free = await sk.freeCollateral();
   if (free < parseUsdc(POOL_SEED_USDC)) {
     const dep = await sk.deposit(POOL_SEED_USDC);
@@ -96,7 +87,7 @@ async function main(): Promise<void> {
 
   console.log("════ SideKick demo orchestrator (Doc 3 §11) ════");
   console.log(`  market: ${market} · engine: ${engineUrl()}`);
-  if (usingDevMnemonic()) console.log("  ⚠ DEV mnemonic — set AGENTS_MNEMONIC for a real run.");
+  console.log("  fleet: Circle MPC wallets (no raw keys)");
   console.log("");
 
   // 1. Optional fund pass.

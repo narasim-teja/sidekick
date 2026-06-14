@@ -1,16 +1,15 @@
 /**
- * Wiring helpers that turn a role into a live agent: derive its HD key, construct the `SideKick`
- * client, build its policy, and assemble an `AgentRunner`. Shared by the standalone `agent:*` entries
- * and the orchestrator so identity + config are identical across both.
+ * Wiring helpers that turn a role into a live agent: resolve its Circle MPC wallet, construct the
+ * `SideKick` client, build its policy, and assemble an `AgentRunner`. Shared by the standalone
+ * `agent:*` entries and the orchestrator so identity + config are identical across both.
  *
- * Each agent is its own EOA (Doc 2 §4.1) derived from the one `AGENTS_MNEMONIC` (keys.ts) — so 5 or
- * 30 agents are just 5 or 30 indices off one seed, each a fully independent unified account.
+ * Each agent signs through its own Circle developer-controlled wallet (Doc 1 §8 / the Circle Agent
+ * Stack ask) — there is no HD/mnemonic or raw-key fallback. The role→wallet resolution + fail-loud
+ * lives in {@link circleSkForRole}.
  */
 
-import type { MarketSymbol } from "@sidekick/sdk";
-import { type AgentRole, deriveDemoAgents, SideKick } from "@sidekick/sdk";
-import { circleSigner } from "@sidekick/sdk/circle";
-import { agentMarket, agentsMnemonic, circleFleetConfig, engineUrl } from "./config.ts";
+import type { AgentRole, MarketSymbol, SideKick } from "@sidekick/sdk";
+import { agentMarket, circleSkForRole } from "./config.ts";
 import { AgentRunner, type AgentStep } from "./runner.ts";
 import { policyForRole } from "./scenario.ts";
 
@@ -32,35 +31,12 @@ export interface BuildOptions {
 }
 
 /**
- * Construct a `SideKick` client for a role (Circle-first). If the fleet is Circle-configured (see
- * {@link circleFleetConfig}) and this role has a Circle wallet id, the client signs via a Circle MPC
- * wallet (no raw key). Otherwise it falls back to the role's HD-derived key off `AGENTS_MNEMONIC` —
- * the reproducible local demo path. Async because the Circle signer resolves the wallet via Circle's API.
+ * Construct a `SideKick` client for a role, signing through the role's Circle MPC wallet (no raw key).
+ * Throws if Circle isn't configured for this role. Async because the Circle signer resolves the wallet
+ * via Circle's API.
  */
 export async function sdkForRole(role: AgentRole, opts: BuildOptions = {}): Promise<SideKick> {
-  const env = opts.env ?? process.env;
-  const circle = circleFleetConfig(env);
-  const walletId = circle?.walletIdFor(role);
-  if (circle && walletId) {
-    const { account, broadcaster } = await circleSigner({
-      apiKey: circle.apiKey,
-      entitySecret: circle.entitySecret,
-      walletId,
-    });
-    return new SideKick({
-      network: "arc-testnet",
-      account,
-      broadcaster,
-      engineUrl: engineUrl(env),
-    });
-  }
-  // HD-derived raw key (Doc 1 §5 Layer B) — the reproducible demo fallback when Circle isn't configured.
-  const id = deriveDemoAgents(agentsMnemonic(env))[role];
-  return new SideKick({
-    network: "arc-testnet",
-    privateKey: id.privateKey,
-    engineUrl: engineUrl(env),
-  });
+  return circleSkForRole(role, opts.env ?? process.env);
 }
 
 /** Build a fully-wired agent (SDK + runner) for a role. Async — the signer may resolve via Circle. */

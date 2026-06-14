@@ -7,11 +7,11 @@
  * calling tools, with no SDK code of its own. It's a thin adapter: each tool builds the right
  * `SideKick` call, runs it, and returns a compact JSON text result the model can reason over.
  *
- * One account per server process. The signer is resolved in {@link main} (index.ts), preferring a
- * **Circle developer-controlled wallet** (`CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID`
- * — MPC custody, no raw key in the process) and falling back to a raw `SIDEKICK_PRIVATE_KEY` EOA. The
- * engine URL comes from `ENGINE_URL` (default `http://localhost:8787`). Keep secrets in the MCP
- * client's env, never in tool args.
+ * One account per server process. The signer is resolved in {@link main} (index.ts): a **Circle
+ * developer-controlled wallet** (`CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID` — MPC
+ * custody, no raw key in the process). There is no raw-key env fallback. The engine URL comes from
+ * `ENGINE_URL` (default `http://localhost:8787`). Keep secrets in the MCP client's env, never in tool
+ * args.
  *
  * @see ../../sdk/src/client.ts (the wrapped surface) · ../../../AGENTS.md (the agent reference)
  */
@@ -23,15 +23,16 @@ import { z } from "zod";
 export const MCP_VERSION = "0.1.0" as const;
 
 /**
- * Config for {@link buildServer}: the constructed {@link SideKick} client to serve. `main` (index.ts)
- * builds it from a Circle wallet or a raw key — buildServer stays sync + signer-agnostic so it's
- * trivially testable with an injected client. A raw `privateKey` is still accepted as a convenience
- * (the SDK builds the client) for the fallback / test paths.
+ * Config for {@link buildServer}: the constructed {@link SideKick} client to serve. In production
+ * `main` (index.ts) injects a Circle-backed `client`. buildServer stays sync + signer-agnostic so it's
+ * trivially testable with an injected client. The raw `privateKey` form is a **test/convenience seam
+ * only** (it leans on the SDK's generic signer) — it is NOT wired to any env var; the MCP server has no
+ * raw-key env fallback.
  */
 export interface McpConfig {
-  /** A pre-built client (Circle-backed or otherwise) — the production path. */
+  /** A pre-built client (Circle-backed in production) — the normal path. */
   client?: SideKick;
-  /** Fallback: a raw private key the SDK builds a client from (if `client` is absent). */
+  /** Test/convenience only: a raw private key the SDK builds a client from (if `client` is absent). */
   privateKey?: `0x${string}`;
   /** The engine REST/WS base URL (only used with `privateKey`). Defaults to `http://localhost:8787`. */
   engineUrl?: string;

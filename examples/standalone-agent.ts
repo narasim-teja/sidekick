@@ -1,58 +1,52 @@
 /**
- * standalone-agent — a complete external trading agent in one file, using ONLY `@sidekick/sdk`.
+ * standalone-agent — a complete external trading agent in one file, using ONLY `@sidekick/sdk`, signed
+ * by a **Circle developer-controlled wallet** (MPC custody — the agent's key is 2-of-2 MPC held by
+ * Circle and never materializes in this process).
  *
- * This is the "a stranger joins the venue and trades" path: nothing here depends on the demo seed,
- * the orchestrator, or any internal package. An outside developer copies this file, sets two env
- * vars, and has an autonomous agent that discovers the venue, onboards, opens a position, reacts to
- * live state every block, answers its own margin calls gas-free, and closes out — the full lifecycle.
+ * This is the "a stranger joins the venue and trades" path: nothing here depends on any internal
+ * package. An outside developer copies this file, sets three Circle env vars, funds the wallet's
+ * address, and has an autonomous agent that discovers the venue, onboards, opens a position, reacts to
+ * live state every block, answers its own margin calls gas-free, and closes out — the full lifecycle,
+ * with no raw private key anywhere.
  *
  * What it shows, end to end:
- *   1. DISCOVER  — `sk.venue()` self-configures the agent (markets, params, addresses, cadence) with
+ *   1. CUSTODY   — `circleAccount({ walletId, apiKey, entitySecret })` → a viem account backed by
+ *                  Circle MPC. `new SideKick({ account, broadcaster })` — no `privateKey` anywhere.
+ *   2. DISCOVER  — `sk.venue()` self-configures the agent (markets, params, addresses, cadence) with
  *                  zero prior knowledge. The agent picks a market from the descriptor, not a constant.
- *   2. ONBOARD   — deposit trading collateral into the Vault + a Gateway balance for nanopayments.
- *   3. OBSERVE   — subscribe to the per-block stream; read live mark / skew / funding / OI / my account.
- *   4. DECIDE    — a tiny skew-reversion policy (lean against the crowd) — replace with your own edge.
- *   5. ACT       — open / hold / close via the SDK; one position per market (POC).
- *   6. SETTLE    — each block, answer any open margin call as a gas-free Gateway x402 nanopayment.
- *                  Miss it and the venue decrements you smoothly — there is no liquidation cliff.
+ *   3. ONBOARD   — deposit trading collateral into the Vault + a Gateway balance for nanopayments.
+ *   4. OBSERVE   — subscribe to the per-block stream; read live mark / skew / funding / OI / my account.
+ *   5. DECIDE    — a tiny skew-reversion policy (lean against the crowd) — replace with your own edge.
+ *   6. ACT       — open / hold / close via the SDK; one position per market (POC).
+ *   7. SETTLE    — each block, answer any open margin call as a gas-free Gateway x402 nanopayment
+ *                  (signed via Circle MPC). Miss it and the venue decrements you smoothly — there is no
+ *                  liquidation cliff. (An unfunded wallet simply can't open/answer — it just won't trade.)
  *
- * Signer (Circle-first): set a Circle developer-controlled wallet (MPC custody, no raw key) —
- *   export CIRCLE_API_KEY=… CIRCLE_ENTITY_SECRET=… CIRCLE_WALLET_ID=…
- * or a raw EOA — export AGENT_PRIVATE_KEY=0x… (USDC is the gas token too). Then:
+ * Run:
+ *   export CIRCLE_API_KEY=...           # Circle Console API key
+ *   export CIRCLE_ENTITY_SECRET=...     # 32-byte entity secret (a SECRET — do not log/commit)
+ *   export CIRCLE_WALLET_ID=...         # a developer-controlled wallet, funded with Arc-testnet USDC
  *   export ENGINE_URL=http://localhost:8787  # the SideKick engine (default; omit to use it)
  *   bun run examples/standalone-agent.ts --collateral 10 --leverage 5 --blocks 30
  *
- * No raw key + want one? `--new-key` prints a fresh EOA to fund from the Circle Arc-testnet USDC
- * faucet, then re-run with AGENT_PRIVATE_KEY set to it. (For a Circle wallet, see circle-wallet-agent.ts.)
+ * No Circle wallet yet? Create one (EOA on ARC-TESTNET) with the SDK helper
+ * (`cd packages/sdk && bun run circle:wallets --name my-agent --count 1`), fund the printed address
+ * from the Circle Arc-testnet USDC faucet, then set CIRCLE_WALLET_ID and re-run.
  */
 
 import {
-  deriveAgent,
-  generateAgentsMnemonic,
   type MarketBlockState,
   type MarketSymbol,
   SideKick,
   type VenueMarketDescriptor,
 } from "@sidekick/sdk";
+import { circleSigner } from "@sidekick/sdk/circle";
 
 // ── tiny CLI / env helpers (no deps) ──────────────────────────────────────────────────
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
   const next = i !== -1 ? process.argv[i + 1] : undefined;
   return next && !next.startsWith("--") ? next : fallback;
-}
-function hasFlag(name: string): boolean {
-  return process.argv.includes(`--${name}`);
-}
-
-// `--new-key` — print a fresh, fundable EOA and exit (the "I have nothing yet" on-ramp).
-if (hasFlag("new-key")) {
-  const id = deriveAgent(generateAgentsMnemonic(), 0, "standalone");
-  console.log("Fresh agent identity (fund this address with Arc-testnet USDC, then re-run):\n");
-  console.log(`  address     : ${id.address}`);
-  console.log(`  AGENT_PRIVATE_KEY=${id.privateKey}\n`);
-  console.log("Faucet: Circle Arc-testnet USDC → send a few USDC to the address above.");
-  process.exit(0);
 }
 
 /** Pick the market to trade from the venue descriptor: prefer a live oracle mark (Stork or Chainlink). */
@@ -90,34 +84,24 @@ async function main(): Promise<void> {
   const maxBlocks = Number(arg("blocks", "30")); // stop after this many blocks (then close out)
   const preferMarket = arg("market", "") || undefined;
 
-  // SIGNER (Circle-first): a Circle developer-controlled wallet (MPC custody, no raw key in this
-  // process) if CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID are set; else a raw
-  // AGENT_PRIVATE_KEY EOA. Both trade + answer margin calls identically — SideKick takes a signer.
-  const { CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_ID, AGENT_PRIVATE_KEY } = process.env;
-  let sk: SideKick;
-  if (CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET && CIRCLE_WALLET_ID) {
-    const { circleSigner } = await import("@sidekick/sdk/circle");
-    const { account, broadcaster } = await circleSigner({
-      apiKey: CIRCLE_API_KEY,
-      entitySecret: CIRCLE_ENTITY_SECRET,
-      walletId: CIRCLE_WALLET_ID,
-    });
-    sk = new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl });
-    console.log(`agent ${sk.address} (Circle MPC wallet, no raw key)`);
-  } else if (AGENT_PRIVATE_KEY) {
-    sk = new SideKick({
-      network: "arc-testnet",
-      privateKey: AGENT_PRIVATE_KEY as `0x${string}`,
-      engineUrl,
-    });
-    console.log(`agent ${sk.address} (raw key)`);
-  } else {
+  // CUSTODY — a Circle developer-controlled wallet (MPC custody, no raw key in this process). Signing
+  // (margin calls) AND on-chain writes (open/close/deposit) both route through Circle.
+  const { CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_ID } = process.env;
+  if (!CIRCLE_API_KEY || !CIRCLE_ENTITY_SECRET || !CIRCLE_WALLET_ID) {
     console.error(
-      "Set a Circle wallet (CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID) or " +
-        "AGENT_PRIVATE_KEY (a funded Arc-testnet EOA; or run with --new-key to mint one).",
+      "Set a Circle developer-controlled wallet: CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET + " +
+        "CIRCLE_WALLET_ID (a funded Arc-testnet Circle wallet). Create one with " +
+        "`cd packages/sdk && bun run circle:wallets --name my-agent --count 1`, then fund its address.",
     );
     process.exit(1);
   }
+  const { account, broadcaster } = await circleSigner({
+    apiKey: CIRCLE_API_KEY,
+    entitySecret: CIRCLE_ENTITY_SECRET,
+    walletId: CIRCLE_WALLET_ID,
+  });
+  const sk = new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl });
+  console.log(`agent ${sk.address} (Circle MPC wallet, no raw key)`);
 
   // 1) DISCOVER — learn the venue from one call (no imported constants, no hardcoded addresses).
   const venue = await sk.venue();
@@ -145,7 +129,7 @@ async function main(): Promise<void> {
     console.log(`  gateway tx : ${res.gatewayDepositTx ?? "(skipped)"}`);
   } catch (err) {
     console.error(
-      `onboard failed (is the EOA funded with USDC?): ${err instanceof Error ? err.message : err}`,
+      `onboard failed (is the Circle wallet's address funded with USDC?): ${err instanceof Error ? err.message : err}`,
     );
     process.exit(1);
   }

@@ -5,13 +5,13 @@
  * like Claude Desktop spawn). Resolves the trading signer from the environment, builds the server
  * (all venue tools), and connects.
  *
- * Signer resolution (Circle-first): if `CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID`
- * are set, the server signs through a **Circle developer-controlled wallet** (MPC custody — no raw key
- * in the process; trades + answers margin calls). Otherwise it falls back to a raw `SIDEKICK_PRIVATE_KEY`
- * EOA. Optional `ENGINE_URL` (default `http://localhost:8787`).
+ * Signer resolution: the server signs through a **Circle developer-controlled wallet** (MPC custody —
+ * no raw key in the process; trades + answers margin calls), configured via `CIRCLE_API_KEY` +
+ * `CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID`. There is no raw-key fallback. Optional `ENGINE_URL`
+ * (default `http://localhost:8787`).
  *
- * Run directly: `CIRCLE_API_KEY=… CIRCLE_ENTITY_SECRET=… CIRCLE_WALLET_ID=… bun run src/index.ts`
- * (or `SIDEKICK_PRIVATE_KEY=0x… …`). Configure the same env in an MCP client — see README.md.
+ * Run directly: `CIRCLE_API_KEY=… CIRCLE_ENTITY_SECRET=… CIRCLE_WALLET_ID=… bun run src/index.ts`.
+ * Configure the same env in an MCP client — see README.md.
  *
  * stdout is reserved for the JSON-RPC protocol; all logs go to stderr.
  */
@@ -23,32 +23,26 @@ import { buildServer, MCP_VERSION } from "./server.ts";
 
 async function main(): Promise<void> {
   const engineUrl = process.env.ENGINE_URL;
-  const { CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_ID, SIDEKICK_PRIVATE_KEY } =
-    process.env;
+  const { CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_ID } = process.env;
 
-  let server: ReturnType<typeof buildServer>;
-  let signerLabel: string;
-
-  if (CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET && CIRCLE_WALLET_ID) {
-    // Circle developer-controlled wallet: MPC custody, no raw key in this process.
-    const { account, broadcaster } = await circleSigner({
-      apiKey: CIRCLE_API_KEY,
-      entitySecret: CIRCLE_ENTITY_SECRET,
-      walletId: CIRCLE_WALLET_ID,
-    });
-    const sk = new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl });
-    server = buildServer({ client: sk });
-    signerLabel = `Circle wallet ${sk.address}`;
-  } else if (SIDEKICK_PRIVATE_KEY) {
-    server = buildServer({ privateKey: SIDEKICK_PRIVATE_KEY as `0x${string}`, engineUrl });
-    signerLabel = "raw key (SIDEKICK_PRIVATE_KEY)";
-  } else {
+  if (!CIRCLE_API_KEY || !CIRCLE_ENTITY_SECRET || !CIRCLE_WALLET_ID) {
     console.error(
-      "[sidekick-mcp] no signer configured. Set a Circle wallet (CIRCLE_API_KEY + " +
-        "CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID) or a raw SIDEKICK_PRIVATE_KEY in the MCP client's env.",
+      "[sidekick-mcp] no signer configured. Set a Circle developer-controlled wallet " +
+        "(CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID) in the MCP client's env. " +
+        "Create one: cd packages/sdk && bun run circle:wallets --name sidekick-mcp --count 1.",
     );
     process.exit(1);
   }
+
+  // Circle developer-controlled wallet: MPC custody, no raw key in this process.
+  const { account, broadcaster } = await circleSigner({
+    apiKey: CIRCLE_API_KEY,
+    entitySecret: CIRCLE_ENTITY_SECRET,
+    walletId: CIRCLE_WALLET_ID,
+  });
+  const sk = new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl });
+  const server = buildServer({ client: sk });
+  const signerLabel = `Circle wallet ${sk.address}`;
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

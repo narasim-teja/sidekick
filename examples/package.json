@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Self-contained, copy-pasteable examples of building on the SideKick venue with @sidekick/sdk. Start with standalone-agent.ts — a complete external trading agent in one file.",
+  "description": "Self-contained, copy-pasteable examples of building on the SideKick venue with @sidekick/sdk. Start with standalone-agent.ts — a complete external trading agent (Circle MPC wallet) in one file.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "agent": "bun run standalone-agent.ts",
-    "agent:circle": "bun run circle-wallet-agent.ts"
+    "agent": "bun run standalone-agent.ts"
   },
   "dependencies": {
     "@sidekick/sdk": "workspace:*"

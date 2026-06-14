@@ -14,14 +14,23 @@
  * shell that drives one against the live venue via the SDK. The orchestrator (`orchestrator.ts`)
  * composes all five into the Doc 3 §11 scenario; standalone `agent:<role>` entries run one each.
  *
- * Run order: `bun run fund` (onboard the agents from one seed) → `bun run demo` (orchestrate), with
- * the engine live (`bun run dev` in packages/engine). See the package README.
+ * Run order: `bun run fund` (onboard each agent's Circle wallet) → `bun run demo` (orchestrate), with
+ * the engine live (`bun run dev` in packages/engine). The fleet signs through Circle MPC wallets only —
+ * no HD/raw-key fallback. See the package README.
  */
 
 export const AGENTS_VERSION = "0.4.0" as const;
 
 // Config helpers.
-export { agentMarket, agentsMnemonic, engineUrl, loadRootEnv } from "./config.ts";
+export {
+  agentMarket,
+  type CircleFleetConfig,
+  circleFleetConfig,
+  circleSkForRole,
+  engineUrl,
+  loadRootEnv,
+  requireCircleFleet,
+} from "./config.ts";
 export { type BuildOptions, type BuiltAgent, buildAgent, sdkForRole } from "./factory.ts";
 export {
   AGENT_KINDS,

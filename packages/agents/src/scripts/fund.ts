@@ -1,39 +1,35 @@
 /**
- * `bun run fund` — onboard the demo agents from one funded seed (Doc 2 §4.1: "decide whether demo
- * agents pre-onboard via a script or self-onboard"; this is the pre-onboard path, and it scales to
- * 10–30 agents because it just walks the HD indices).
+ * `bun run fund` — onboard the demo agents into the venue from the USDC each Circle wallet ALREADY
+ * holds. The fleet signs through Circle developer-controlled (MPC) wallets — there is no HD seed to
+ * fan out from — so funding is two steps:
  *
- * What it does, per agent (long, short, mm, funding, dark):
- *   1. Transfer USDC from the funder (HD index 0) to the agent's EOA — on Arc, USDC is BOTH the gas
- *      token and the ERC-20 collateral, so this one transfer covers gas + trading collateral + the
- *      Gateway balance. The amount = vaultUSDC + gatewayUSDC + a gas buffer (per `scenario.ts`).
- *   2. Have the agent onboard itself via the SDK: deposit `vaultUSDC` into the Vault (trading
- *      collateral) and `gatewayUSDC` into its Circle Gateway unified balance (funds the x402
- *      margin-call nanopayments). The dark agent skips the Gateway deposit (it never answers calls).
+ *   1. (manual, once) Fund each role's Circle wallet ADDRESS with Arc-testnet USDC, directly from the
+ *      faucet (https://faucet.circle.com). On Arc, USDC is BOTH the gas token and the ERC-20
+ *      collateral, so one balance covers gas + trading collateral + the Gateway balance. Run this
+ *      script with `--dry` first to print each wallet's address + the amount it needs.
+ *   2. (this script) Each agent onboards itself via the SDK, signed by its Circle wallet: deposit
+ *      `vaultUSDC` into the Vault (trading collateral) and `gatewayUSDC` into its Circle Gateway
+ *      unified balance (funds the x402 margin-call nanopayments). The dark agent skips the Gateway
+ *      deposit (it never answers calls). Both deposits are signer-only / broadcaster-driven — no raw
+ *      key in this process.
  *
- * The funder (index 0) must hold enough USDC for all agents — fund it once at https://faucet.circle.com.
- * Idempotent-ish: re-running tops up again. Pass `--only long,funding` to fund a subset, `--dry` to
- * print the plan without sending.
+ * An agent whose Circle wallet isn't funded simply can't onboard (the deposit reverts) — it then holds
+ * no position and doesn't trade. And an onboarded agent that later can't answer a margin call just
+ * **decrements smoothly** (the venue's no-liquidation design), it does not error out.
  *
  * Requires: a running engine is NOT needed (this is pure chain I/O), but the venue must be deployed
- * (it is — `@sidekick/shared` deployments). `AGENTS_MNEMONIC` should be a funded seed for a real run.
+ * (it is — `@sidekick/shared` deployments) and the fleet's Circle config set (CIRCLE_API_KEY +
+ * CIRCLE_ENTITY_SECRET + per-role wallet ids). Pass `--only long,funding` for a subset, `--dry` to
+ * print the plan (addresses + amounts) without sending.
  */
 
-import {
-  AGENT_ROLES,
-  type AgentRole,
-  deriveDemoAgents,
-  deriveFunder,
-  formatUsdc,
-  parseUsdc,
-  SideKick,
-} from "@sidekick/sdk";
+import { AGENT_ROLES, type AgentRole, formatUsdc, parseUsdc } from "@sidekick/sdk";
 import { ARC_TESTNET_DEPLOYMENT, arcTestnet, rpcUrl } from "@sidekick/shared";
-import { createPublicClient, createWalletClient, erc20Abi, http } from "viem";
-import { agentsMnemonic, engineUrl, hasFlag, loadRootEnv, usingDevMnemonic } from "../config.ts";
+import { createPublicClient, erc20Abi, http } from "viem";
+import { circleSkForRole, hasFlag, loadRootEnv } from "../config.ts";
 import { SCENARIO } from "../scenario.ts";
 
-/** A gas buffer (decimal USDC) sent on top of trading + Gateway funds, so each agent can pay its txns. */
+/** A gas buffer (decimal USDC) each wallet should hold on top of trading + Gateway funds, for txns. */
 const GAS_BUFFER_USDC = "0.5";
 
 function rolesToFund(): AgentRole[] {
@@ -48,76 +44,44 @@ function rolesToFund(): AgentRole[] {
 async function main(): Promise<void> {
   loadRootEnv();
   const dry = hasFlag("dry");
-  const mnemonic = agentsMnemonic();
-  const funder = deriveFunder(mnemonic);
-  const agents = deriveDemoAgents(mnemonic);
   const roles = rolesToFund();
-
-  const chain = arcTestnet();
-  const rpc = rpcUrl();
-  const pub = createPublicClient({ chain, transport: http(rpc) });
-  const funderWallet = createWalletClient({ account: funder.account, chain, transport: http(rpc) });
+  const pub = createPublicClient({ chain: arcTestnet(), transport: http(rpcUrl()) });
   const usdc = ARC_TESTNET_DEPLOYMENT.usdc;
 
-  console.log("── SideKick agent funding ──");
-  console.log(`  funder (idx 0): ${funder.address}`);
-  if (usingDevMnemonic())
-    console.log("  ⚠ DEV mnemonic — fund index 0 of a real seed for a live run.");
-
-  const funderBal = (await pub.readContract({
-    address: usdc,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: [funder.address],
-  })) as bigint;
-  console.log(`  funder USDC:    ${formatUsdc(funderBal)}\n`);
-
-  // Plan: total each agent needs from the funder.
-  let totalNeeded = 0n;
-  for (const role of roles) {
-    const p = SCENARIO[role];
-    totalNeeded += parseUsdc(p.vaultUSDC) + parseUsdc(p.gatewayUSDC) + parseUsdc(GAS_BUFFER_USDC);
-  }
-  console.log(`  plan: fund ${roles.length} agent(s), total ${formatUsdc(totalNeeded)} USDC\n`);
-  if (funderBal < totalNeeded && !dry) {
-    throw new Error(
-      `funder holds ${formatUsdc(funderBal)} USDC but the plan needs ${formatUsdc(totalNeeded)}. ` +
-        "Fund the funder at https://faucet.circle.com.",
-    );
-  }
+  console.log("── SideKick agent onboarding (Circle MPC wallets) ──");
+  console.log(
+    "  fund each wallet's address below with Arc-testnet USDC (https://faucet.circle.com),",
+  );
+  console.log(
+    "  then this script deposits Vault collateral + the Gateway balance from that balance.\n",
+  );
 
   for (const role of roles) {
-    const id = agents[role];
+    const sk = await circleSkForRole(role); // Circle MPC wallet for this role (no raw key)
+    const address = sk.address;
     const p = SCENARIO[role];
-    const transfer = parseUsdc(p.vaultUSDC) + parseUsdc(p.gatewayUSDC) + parseUsdc(GAS_BUFFER_USDC);
+    // Vault collateral + Gateway balance + a gas buffer (everything paid in USDC on Arc).
+    const need = parseUsdc(p.vaultUSDC) + parseUsdc(p.gatewayUSDC) + parseUsdc(GAS_BUFFER_USDC);
+    const bal = (await pub.readContract({
+      address: usdc,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [address],
+    })) as bigint;
+
     console.log(
-      `▸ ${role} ${id.address}: send ${formatUsdc(transfer)} USDC ` +
+      `▸ ${role} ${address}: holds ${formatUsdc(bal)} — needs ${formatUsdc(need)} ` +
         `(vault ${p.vaultUSDC} + gateway ${p.gatewayUSDC} + gas ${GAS_BUFFER_USDC})`,
     );
     if (dry) continue;
-
-    // 1. Transfer USDC funder → agent (covers gas + collateral + gateway).
-    const tx = await funderWallet.writeContract({
-      address: usdc,
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [id.address, transfer],
-      chain,
-      account: funder.account,
-    });
-    const ok = (await pub.waitForTransactionReceipt({ hash: tx })).status === "success";
-    if (!ok) {
-      console.log(`  ✗ transfer reverted (${tx}) — skipping onboard`);
+    if (bal < need) {
+      console.log(
+        `  ✗ insufficient — fund this Circle wallet at https://faucet.circle.com, then re-run\n`,
+      );
       continue;
     }
-    console.log(`  ✓ transferred (${tx})`);
 
-    // 2. Agent onboards itself (Vault deposit + Gateway deposit). Dark skips the Gateway balance.
-    const sk = new SideKick({
-      network: "arc-testnet",
-      privateKey: id.privateKey,
-      engineUrl: engineUrl(),
-    });
+    // Onboard: Vault deposit + Gateway deposit, signed by the Circle wallet. Dark skips the Gateway leg.
     try {
       const res = await sk.onboard({
         depositUSDC: p.vaultUSDC,

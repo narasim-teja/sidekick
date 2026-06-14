@@ -5,8 +5,8 @@
  * Run: `bun run src/scripts/close-all.ts --market BTC-PERP`.
  */
 
-import { type AgentRole, deriveDemoAgents, type MarketSymbol, SideKick } from "@sidekick/sdk";
-import { agentsMnemonic, engineUrl, loadRootEnv } from "../config.ts";
+import { AGENT_ROLES, type MarketSymbol } from "@sidekick/sdk";
+import { circleSkForRole, loadRootEnv } from "../config.ts";
 
 loadRootEnv();
 
@@ -17,15 +17,10 @@ function arg(name: string, fallback: string): string {
 
 async function main(): Promise<void> {
   const market = arg("market", "BTC-PERP") as MarketSymbol;
-  const agents = deriveDemoAgents(agentsMnemonic());
   console.log(`closing all demo-agent positions on ${market}…`);
-  for (const [role, id] of Object.entries(agents) as [AgentRole, (typeof agents)[AgentRole]][]) {
-    const sk = new SideKick({
-      network: "arc-testnet",
-      privateKey: id.privateKey,
-      engineUrl: engineUrl(),
-    });
+  for (const role of AGENT_ROLES) {
     try {
+      const sk = await circleSkForRole(role); // Circle MPC wallet for this role (no raw key)
       const view = await sk.getAccount(market);
       if (view.side === "flat") {
         console.log(`  ${role.padEnd(8)} flat — nothing to close`);

@@ -1,25 +1,26 @@
 /**
  * Shared config + env loading for the demo agents. Every runnable entry (`agent:long`, the
- * orchestrator, the funding script) loads the repo-root `.env` the same way the engine + spikes do
- * (Bun auto-loads `.env` from CWD, but these run per-package), and resolves the common knobs:
+ * orchestrator, the fund/close-all/register-identities scripts) loads the repo-root `.env` the same way
+ * the engine + spikes do (Bun auto-loads `.env` from CWD, but these run per-package), and resolves the
+ * common knobs:
  *
- *   - `AGENTS_MNEMONIC`  — the one BIP-39 seed every agent EOA is derived from (Doc 2 §4.1 keys). If
- *     unset, a deterministic dev seed is used so the demo still runs locally (NEVER for real funds).
+ *   - `CIRCLE_API_KEY` / `CIRCLE_ENTITY_SECRET` + per-role wallet ids — the fleet's signing custody
+ *     (Circle developer-controlled MPC wallets; no raw key in-process). REQUIRED — see {@link circleFleetConfig}.
  *   - `ENGINE_URL`       — the engine's REST+WS base (default http://localhost:8787).
  *   - `AGENT_MARKET`     — the market the agents trade (default from DEFAULT_MARKET / BTC-PERP).
  *
  * Per-agent sizing lives in `scenario.ts`, not here — this is just the environment.
+ *
+ * Custody model (Doc 1 §8 / the Circle Agent Stack ask): the demo fleet signs through Circle MPC
+ * wallets ONLY. There is no HD/mnemonic fallback — each role maps to a Circle `walletId` and the
+ * operator's entity secret authorizes signing. {@link circleSkForRole} is the one seam every entry
+ * uses to turn a role into a Circle-backed `SideKick` client.
  */
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { MARKET_SYMBOLS, type MarketSymbol } from "@sidekick/sdk";
-
-/**
- * A fixed dev seed so `bun run agent:*` works out-of-the-box with no setup (local demo only). Real
- * runs MUST set `AGENTS_MNEMONIC` to a funded seed — this one is public and holds nothing.
- */
-export const DEV_MNEMONIC = "test test test test test test test test test test test junk"; // canonical hardhat dev mnemonic
+import { type AgentRole, MARKET_SYMBOLS, type MarketSymbol, SideKick } from "@sidekick/sdk";
+import { circleSigner } from "@sidekick/sdk/circle";
 
 /** Load the repo-root `.env` into process.env without overwriting existing values. */
 export function loadRootEnv(): void {
@@ -46,16 +47,6 @@ function unquote(v: string): string {
   return v;
 }
 
-/** The agents' shared seed (env `AGENTS_MNEMONIC`, else the dev seed). */
-export function agentsMnemonic(env: Record<string, string | undefined> = process.env): string {
-  return env.AGENTS_MNEMONIC?.trim() || DEV_MNEMONIC;
-}
-
-/** Whether we're running on the public dev seed (so scripts can warn before touching real funds). */
-export function usingDevMnemonic(env: Record<string, string | undefined> = process.env): boolean {
-  return agentsMnemonic(env) === DEV_MNEMONIC;
-}
-
 /** The engine REST/WS base URL (env `ENGINE_URL`, else the engine's default port). */
 export function engineUrl(env: Record<string, string | undefined> = process.env): string {
   return (env.ENGINE_URL ?? `http://localhost:${env.ENGINE_PORT ?? "8787"}`).replace(/\/$/, "");
@@ -70,18 +61,28 @@ export function agentMarket(env: Record<string, string | undefined> = process.en
   return raw as MarketSymbol;
 }
 
-/**
- * Circle developer-controlled wallet config for the demo fleet, if present. Each role maps to a Circle
- * wallet id so the fleet signs via MPC (no raw keys) — the production custody path. Provide ids either
- * per-role (`CIRCLE_WALLET_ID_LONG`, `_SHORT`, `_MM`, `_FUNDING`, `_DARK`) or as one ordered comma list
- * (`CIRCLE_AGENT_WALLET_IDS=id1,id2,…` mapped to AGENT_ROLES in order). Returns null when Circle isn't
- * configured (no API key/secret, or no ids) — callers then fall back to HD-derived keys.
- */
-export function circleFleetConfig(env: Record<string, string | undefined> = process.env): {
+/** The fleet's Circle custody config: account creds + a role→walletId resolver. */
+export interface CircleFleetConfig {
   apiKey: string;
   entitySecret: string;
-  walletIdFor: (role: string) => string | undefined;
-} | null {
+  /** The Circle developer-controlled wallet id for a role, or undefined if unmapped. */
+  walletIdFor: (role: AgentRole) => string | undefined;
+}
+
+/** The five demo roles, in order, for mapping a `CIRCLE_AGENT_WALLET_IDS` comma list. */
+const FLEET_ROLES: readonly AgentRole[] = ["long", "short", "mm", "funding", "dark"] as const;
+
+/**
+ * Circle developer-controlled wallet config for the demo fleet, if present. Each role maps to a Circle
+ * wallet id so the fleet signs via MPC (no raw keys) — the only custody path for the fleet. Provide ids
+ * either per-role (`CIRCLE_WALLET_ID_LONG`, `_SHORT`, `_MM`, `_FUNDING`, `_DARK`) or as one ordered
+ * comma list (`CIRCLE_AGENT_WALLET_IDS=id1,id2,…` mapped to the roles in order). Returns null when
+ * Circle isn't configured (no API key/secret, or no wallet ids at all). Callers should use
+ * {@link requireCircleFleet} to fail loud rather than silently no-op.
+ */
+export function circleFleetConfig(
+  env: Record<string, string | undefined> = process.env,
+): CircleFleetConfig | null {
   const apiKey = env.CIRCLE_API_KEY?.trim();
   const entitySecret = env.CIRCLE_ENTITY_SECRET?.trim();
   if (!apiKey || !entitySecret) return null;
@@ -89,20 +90,70 @@ export function circleFleetConfig(env: Record<string, string | undefined> = proc
   const list = env.CIRCLE_AGENT_WALLET_IDS?.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const order = ["long", "short", "mm", "funding", "dark"];
-  const byOrder = new Map<string, string>();
+  const byOrder = new Map<AgentRole, string>();
   if (list?.length) {
-    order.forEach((r, i) => {
+    FLEET_ROLES.forEach((r, i) => {
       if (list[i]) byOrder.set(r, list[i] as string);
     });
   }
 
-  const walletIdFor = (role: string): string | undefined =>
+  const walletIdFor = (role: AgentRole): string | undefined =>
     env[`CIRCLE_WALLET_ID_${role.toUpperCase()}`]?.trim() || byOrder.get(role);
 
-  // Only treat the fleet as Circle-backed if at least one role has a wallet id.
-  const anyId = order.some((r) => walletIdFor(r));
+  // Treat the fleet as Circle-backed if at least one role has a wallet id (per-role requireness is
+  // enforced in requireCircleFleet / circleSkForRole, which name the specific missing role).
+  const anyId = FLEET_ROLES.some((r) => walletIdFor(r));
   return anyId ? { apiKey, entitySecret, walletIdFor } : null;
+}
+
+/**
+ * Resolve the fleet's Circle config or throw with a precise, actionable message. The demo fleet has NO
+ * raw-key fallback — Circle MPC wallets are the only custody path — so every entry that builds an agent
+ * funnels through this. `roles` (default all five) are the roles this caller needs a wallet for; if any
+ * is unmapped, the error names which.
+ */
+export function requireCircleFleet(
+  env: Record<string, string | undefined> = process.env,
+  roles: readonly AgentRole[] = FLEET_ROLES,
+): CircleFleetConfig {
+  const circle = circleFleetConfig(env);
+  if (!circle) {
+    throw new Error(
+      "Circle is required for the agent fleet (no HD/raw-key fallback). Set CIRCLE_API_KEY, " +
+        "CIRCLE_ENTITY_SECRET, and a wallet id per role (CIRCLE_WALLET_ID_LONG/_SHORT/_MM/_FUNDING/_DARK, " +
+        "or CIRCLE_AGENT_WALLET_IDS=id1,id2,id3,id4,id5). Create a set + 5 wallets: " +
+        "cd packages/sdk && bun run circle:wallets --name sidekick-agents --count 5",
+    );
+  }
+  const missing = roles.filter((r) => !circle.walletIdFor(r));
+  if (missing.length) {
+    throw new Error(
+      `Circle wallet id missing for role(s): ${missing.join(", ")}. Set ` +
+        `${missing.map((r) => `CIRCLE_WALLET_ID_${r.toUpperCase()}`).join(" / ")} ` +
+        "(or include them in CIRCLE_AGENT_WALLET_IDS, in long,short,mm,funding,dark order).",
+    );
+  }
+  return circle;
+}
+
+/**
+ * Build a Circle-backed `SideKick` client for a role — the single seam every fleet entry (the agent
+ * runners, fund/close-all/register-identities scripts) uses. Signs + broadcasts through the role's Circle MPC
+ * wallet (no raw key in-process). Throws (via {@link requireCircleFleet}) if Circle isn't configured
+ * for this role. Async because the Circle signer resolves the wallet address via Circle's API.
+ */
+export async function circleSkForRole(
+  role: AgentRole,
+  env: Record<string, string | undefined> = process.env,
+): Promise<SideKick> {
+  const circle = requireCircleFleet(env, [role]);
+  const walletId = circle.walletIdFor(role) as string; // requireCircleFleet guaranteed it
+  const { account, broadcaster } = await circleSigner({
+    apiKey: circle.apiKey,
+    entitySecret: circle.entitySecret,
+    walletId,
+  });
+  return new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl: engineUrl(env) });
 }
 
 /** A simple `--flag value` / `--flag` CLI arg reader for the scripts. */

@@ -70,6 +70,41 @@ export function agentMarket(env: Record<string, string | undefined> = process.en
   return raw as MarketSymbol;
 }
 
+/**
+ * Circle developer-controlled wallet config for the demo fleet, if present. Each role maps to a Circle
+ * wallet id so the fleet signs via MPC (no raw keys) — the production custody path. Provide ids either
+ * per-role (`CIRCLE_WALLET_ID_LONG`, `_SHORT`, `_MM`, `_FUNDING`, `_DARK`) or as one ordered comma list
+ * (`CIRCLE_AGENT_WALLET_IDS=id1,id2,…` mapped to AGENT_ROLES in order). Returns null when Circle isn't
+ * configured (no API key/secret, or no ids) — callers then fall back to HD-derived keys.
+ */
+export function circleFleetConfig(env: Record<string, string | undefined> = process.env): {
+  apiKey: string;
+  entitySecret: string;
+  walletIdFor: (role: string) => string | undefined;
+} | null {
+  const apiKey = env.CIRCLE_API_KEY?.trim();
+  const entitySecret = env.CIRCLE_ENTITY_SECRET?.trim();
+  if (!apiKey || !entitySecret) return null;
+
+  const list = env.CIRCLE_AGENT_WALLET_IDS?.split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const order = ["long", "short", "mm", "funding", "dark"];
+  const byOrder = new Map<string, string>();
+  if (list?.length) {
+    order.forEach((r, i) => {
+      if (list[i]) byOrder.set(r, list[i] as string);
+    });
+  }
+
+  const walletIdFor = (role: string): string | undefined =>
+    env[`CIRCLE_WALLET_ID_${role.toUpperCase()}`]?.trim() || byOrder.get(role);
+
+  // Only treat the fleet as Circle-backed if at least one role has a wallet id.
+  const anyId = order.some((r) => walletIdFor(r));
+  return anyId ? { apiKey, entitySecret, walletIdFor } : null;
+}
+
 /** A simple `--flag value` / `--flag` CLI arg reader for the scripts. */
 export function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);

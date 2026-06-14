@@ -15,7 +15,7 @@ import { buildAgent } from "./factory.ts";
 export async function runOne(role: AgentRole): Promise<void> {
   loadRootEnv();
   const market = agentMarket();
-  const agent = buildAgent(role, { market });
+  const agent = await buildAgent(role, { market });
 
   console.log(`── SideKick agent: ${role} ──`);
   console.log(`  address: ${agent.address}`);

@@ -126,7 +126,9 @@ async function main(): Promise<void> {
     }
   };
 
-  const built: BuiltAgent[] = AGENT_ROLES.map((role) => buildAgent(role, { market, onStep }));
+  const built: BuiltAgent[] = await Promise.all(
+    AGENT_ROLES.map((role) => buildAgent(role, { market, onStep })),
+  );
   console.log("  agents:");
   for (const a of built) {
     const p = SCENARIO[a.role];

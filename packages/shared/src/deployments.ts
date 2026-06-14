@@ -76,7 +76,10 @@ export const ARC_TESTNET_DEPLOYMENT: VenueDeployment = {
     "ETH-PERP": {
       pool: "0x34163040c9e570e991C02219d1627c633b2f6642" as Address,
       lpToken: "0xfdA3D758478C6adB378f0409Db3aFC31500eA43D" as Address,
-      oracleAdapter: "0xa7937d17FeCDC7c2266d0Fdeb4BD551E1B5aDe79" as Address,
+      // Repointed to a Chainlink MarkReceiver (CRE consumer) — the markfeed workflow delivers a real
+      // Data Streams ETH/USD price via DON→KeystoneForwarder→onReport; the engine reads chainlink-live.
+      // Prior adapter: StorkAdapter 0xa7937d17FeCDC7c2266d0Fdeb4BD551E1B5aDe79 (repoint back via setOracle).
+      oracleAdapter: "0xaa79bc289996346b3099a850b29239bdf585617c" as Address,
     },
     "SOL-PERP": {
       pool: "0x57D23a7F93d71808164d58243072ed7149CBf99c" as Address,

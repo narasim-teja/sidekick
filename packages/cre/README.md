@@ -66,6 +66,32 @@ cre workflow simulate ./settle   --broadcast --target arc
 Secrets (`CHAINLINK_API_KEY` / `CHAINLINK_API_SECRET`, the Data Streams credentials) are read from the
 environment via [`secrets.yaml`](./secrets.yaml) — never hard-coded.
 
+## Multiple feeds → the LIVE venue (ETH-PERP + LINK-PERP)
+
+The live venue runs **two** Chainlink-sourced markets, each its own feed → its own `MarkReceiver` (the
+per-market oracle adapter in [`deployments.ts`](../shared/src/deployments.ts)). The *same* `markfeed`
+workflow delivers both — one config per feed (`workflow.yaml` always loads `./config.json`, so swap it
+in per run; the named files are the source of truth):
+
+| Market | Feed (Data Streams) | MarkReceiver (live venue) | Config |
+|---|---|---|---|
+| ETH-PERP | ETH/USD `0x000359843a…` | `0xaa79bc28…996346b…585617c` | [`config.eth.json`](./markfeed/config.eth.json) (= default `config.json`) |
+| LINK-PERP | LINK/USD `0x00036fe4…` | `0xb9f26b08…aec5d37` | [`config.link.json`](./markfeed/config.link.json) |
+
+```bash
+# ETH (config.json already = config.eth.json):
+cre workflow simulate ./markfeed --broadcast --target arc
+# LINK (swap the active config, then run):
+cp markfeed/config.link.json markfeed/config.json
+cre workflow simulate ./markfeed --broadcast --target arc
+cp markfeed/config.eth.json markfeed/config.json   # restore the default
+```
+
+> Only ETH/USD + LINK/USD return live reports on this testnet Data Streams account (BTC/SOL `404`,
+> HYPE has no feed) — so the live set is exactly these two real-feed markets. The `0x559074…`
+> `MarkReceiver` below is the **isolated** CRE-settle venue (`DeployCreVenue.s.sol`), a separate
+> evidence track — not the live markets.
+
 ## Capturing live-run evidence (do this before the demo)
 
 The chain of custody is proven in Foundry (`forge test --match-contract "MarkReceiver|CheckpointSettler"`),

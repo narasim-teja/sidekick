@@ -20,13 +20,19 @@ import type { MarkPrice, OracleAdapter, OracleSource } from "@sidekick/shared";
 import { floatToWad } from "../fixed/units.ts";
 import { mulberry32 } from "../sim/price.ts";
 
-/** Plausible per-asset starting marks (USD) for the synthetic walk. Display anchors only. */
+/**
+ * Per-asset starting marks (USD) for the synthetic walk — the fallback anchor when a real feed isn't
+ * fresh on-chain. ETH/LINK are set to the live **Chainlink Data Streams TESTNET** values (verified via
+ * `bun run chainlink:probe`: ETH/USD ≈ $1,675, LINK/USD ≈ $7.91 — testnet prices differ from mainnet),
+ * so a fallback doesn't snap to a wildly wrong price. BTC/SOL/HYPE keep mainnet-ish anchors (they're not
+ * in the live set today).
+ */
 export const SYNTHETIC_ANCHORS: Record<string, number> = {
   BTCUSD: 70_000,
-  ETHUSD: 3_500,
+  ETHUSD: 1_675,
   SOLUSD: 180,
   HYPEUSD: 35,
-  LINKUSD: 18,
+  LINKUSD: 7.9,
 };
 
 /** A standard-normal shock via Box–Muller, driven by a [0,1) PRNG (matches sim/price.ts). */

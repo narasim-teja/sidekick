@@ -26,7 +26,15 @@ import {
   parseUsdc,
 } from "@sidekick/sdk";
 import { POOL_ABI } from "@sidekick/sdk/abis";
-import { ARC_TESTNET_DEPLOYMENT, arcTestnet, marketDeployment, rpcUrl } from "@sidekick/shared";
+import type { SideKick } from "@sidekick/sdk";
+import {
+  ARC_TESTNET_DEPLOYMENT,
+  arcTestnet,
+  marketDeployment,
+  type MarketSymbol,
+  resolveMarketSet,
+  rpcUrl,
+} from "@sidekick/shared";
 import { createPublicClient, http } from "viem";
 import { agentMarket, circleSkForRole, engineUrl, hasFlag, loadRootEnv } from "./config.ts";
 import { type BuiltAgent, buildAgent } from "./factory.ts";
@@ -39,7 +47,23 @@ const POOL_SEED_ROLE: AgentRole = "funding";
 /** Liquidity (decimal USDC) the funder seeds the pool with if it is thin (so opens are admitted). */
 const POOL_SEED_USDC = process.env.POOL_SEED_USDC ?? "12";
 
-async function ensurePoolSeeded(market: ReturnType<typeof agentMarket>): Promise<void> {
+/**
+ * Seed every LIVE market's pool (from `MARKETS`, the same set the engine runs) so opens are admitted —
+ * a 0-capital pool admits no trades (the Layer-2 cap is k·capital). Resolves the funding-role Circle
+ * wallet ONCE and seeds each thin pool from it. So both the engine's markets are tradeable, not just
+ * the one the demo fleet opens on (`AGENT_MARKET`).
+ */
+async function seedLiveMarkets(): Promise<void> {
+  const markets = resolveMarketSet(process.env);
+  // Resolve the seeding wallet once (a Circle API round-trip); reuse across markets.
+  const sk = await circleSkForRole(POOL_SEED_ROLE);
+  console.log(
+    `  seeding ${markets.length} market pool(s) [${markets.join(", ")}] from the ${POOL_SEED_ROLE} Circle wallet (${sk.address})`,
+  );
+  for (const market of markets) await ensurePoolSeeded(market, sk);
+}
+
+async function ensurePoolSeeded(market: MarketSymbol, sk: SideKick): Promise<void> {
   const chain = arcTestnet();
   const pub = createPublicClient({ chain, transport: http(rpcUrl()) });
   const pool = marketDeployment(ARC_TESTNET_DEPLOYMENT, market).pool;
@@ -49,15 +73,12 @@ async function ensurePoolSeeded(market: ReturnType<typeof agentMarket>): Promise
     functionName: "capital",
   })) as bigint;
   if (capital >= parseUsdc(POOL_SEED_USDC)) {
-    console.log(`  pool ${market} already seeded (capital ${formatUsdc(capital)} USDC)`);
+    console.log(`  · ${market} already seeded (capital ${formatUsdc(capital)} USDC)`);
     return;
   }
-  // Seed from the funding-role Circle wallet (funded as part of the fleet) — no raw key.
-  const sk = await circleSkForRole(POOL_SEED_ROLE);
-  console.log(
-    `  seeding pool ${market} with ${POOL_SEED_USDC} USDC from the ${POOL_SEED_ROLE} Circle wallet (${sk.address})…`,
-  );
-  // The seeding wallet must have free collateral in the Vault first.
+  console.log(`  · seeding ${market} with ${POOL_SEED_USDC} USDC…`);
+  // The seeding wallet must have free collateral in the Vault first (provideLiquidity consumes it,
+  // so each market deposits its own seed).
   const free = await sk.freeCollateral();
   if (free < parseUsdc(POOL_SEED_USDC)) {
     const dep = await sk.deposit(POOL_SEED_USDC);
@@ -65,7 +86,7 @@ async function ensurePoolSeeded(market: ReturnType<typeof agentMarket>): Promise
   }
   const tx = await sk.provideLiquidity(market, POOL_SEED_USDC);
   const ok = await sk.confirm(tx);
-  console.log(ok ? `  ✓ pool seeded (${tx})` : `  ✗ pool seed reverted (${tx})`);
+  console.log(ok ? `    ✓ ${market} seeded (${tx})` : `    ✗ ${market} seed reverted (${tx})`);
 }
 
 /** Compact per-block narration line. */
@@ -99,8 +120,9 @@ async function main(): Promise<void> {
     // fund.ts calls process.exit, so when --fund is used run it as a separate step (bun run fund).
   }
 
-  // 2. Seed the pool so opens are admitted.
-  await ensurePoolSeeded(market);
+  // 2. Seed all LIVE market pools so opens are admitted (the fleet trades AGENT_MARKET, but seeding
+  //    every market the engine runs means each is discoverable + tradeable).
+  await seedLiveMarkets();
   console.log("");
 
   // 3. Build + start all five agents on the shared stream.

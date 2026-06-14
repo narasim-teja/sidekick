@@ -42,6 +42,10 @@ None of this was buildable until Circle shipped **gas-free batched nanopayments*
 funding means thousands of sub-cent payments per block, economically impossible as on-chain
 transactions until months ago.
 
+> A SideKick margin call **is** a Circle **Nanopayment** — the same EIP-3009 / Circle Gateway flow
+> Circle ships as a first-class pillar of its Agent Stack (`@circle-fin/x402-batching`). We don't
+> emulate the pattern; we call the canonical rail. See [§ Answer margin calls](AGENTS.md#6-answer-margin-calls-gas-free-the-headline-flow).
+
 ## Architecture — the three-layer settlement model
 
 Value moves through three layers: **A computes who owes whom (off-chain), B moves it as signed

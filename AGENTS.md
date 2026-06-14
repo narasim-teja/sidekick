@@ -35,10 +35,12 @@ const sk = new SideKick({
 });
 ```
 
-You can also pass a viem `account` instead of `privateKey` (KMS/hardware-wallet ready) — but the
-Gateway nanopayment path (`answerMarginCall`, Gateway `deposit`) needs a raw `privateKey`, because
-the Circle x402 SDK signs with one. Collateral is **Arc-testnet USDC** (`0x3600…0000`), which is also
-the gas token, so a funded EOA needs only USDC.
+You can also pass a viem `account` instead of `privateKey` (KMS / hardware-wallet / Circle-Wallet
+ready). The gas-free **Nanopayment** flow (`answerMarginCall`) works either way — with an `account`
+it signs the EIP-3009 authorization through your signer, so a real agent never hands over (or even
+materializes) a raw key. Only the *raw* `gateway().deposit(...)` handle needs a `privateKey` (Circle's
+convenience `GatewayClient` constructor takes one). Collateral is **Arc-testnet USDC** (`0x3600…0000`),
+which is also the gas token, so a funded account needs only USDC.
 
 ## 2. Discover the venue (`sk.venue()`)
 
@@ -61,9 +63,9 @@ the maintenance fraction — max leverage is ≈ `1/m`.
 
 ```ts
 await sk.onboard({
-  depositUSDC: "20",   // → Vault free collateral (your trading margin)
-  gatewayUSDC: "5",    // → Circle Gateway balance (what margin-call nanopayments draw against)
-  // identityId: 1n,   // optional: link an ERC-8004 identity
+  depositUSDC: "20",        // → Vault free collateral (your trading margin)
+  gatewayUSDC: "5",         // → Circle Gateway balance (what margin-call nanopayments draw against)
+  registerIdentity: true,   // optional: mint a real ERC-8004 identity (see §6.5). Or `identityId: 42n` to link one.
 });
 ```
 
@@ -125,7 +127,9 @@ per-market open-interest cap (`k · poolCapital`) and admits or reverts.
 ## 6. Answer margin calls (gas-free, the headline flow)
 
 Each block, the engine reconciles every position. If yours is short of maintenance it emits a margin
-call. Answer it as a **gas-free Circle Gateway x402 nanopayment**:
+call. Answer it as a **gas-free Circle Gateway x402 nanopayment** — this is a Circle **Nanopayment**
+in the literal sense (EIP-3009 authorization over Circle Gateway via `@circle-fin/x402-batching`, the
+same rail Circle's Agent Stack ships), not a look-alike:
 
 ```ts
 const owed = await sk.owed("BTC-PERP");        // bigint, 6dp — current shortfall (0 if healthy)
@@ -139,6 +143,32 @@ if (owed > 0n) {
 **If you don't answer**, nothing catastrophic happens: the venue **decrements** your notional that
 block to restore `equity ≥ m·N` — a smooth shrink, no liquidation, no penalty, no keeper. That's the
 anti-liquidation guarantee. (If equity goes ≤ 0 the position gaps to the pool's gap fund.)
+
+## 6.5. Identity (ERC-8004) — be a discoverable, reputation-bearing agent
+
+SideKick agents are real **ERC-8004 ("Trustless Agents")** identities, not anonymous EOAs. Arc hosts
+the canonical Identity + Reputation registries on-chain; one call mints you an identity NFT whose
+payee `agentWallet` defaults to the very EOA that trades and answers margin calls.
+
+```ts
+// Mint a real identity (costs USDC gas — a real on-chain mint) and mirror it in-venue:
+const { agentId } = await sk.registerAgent();      // → Identity Registry register() + linkIdentity()
+const id = await sk.agentIdentity();
+// id = { agentId, linked, agentWallet, namespacedId: "eip155:5042002:0x8004…/<agentId>" }
+```
+
+`venue().erc8004` gives you the registry addresses + namespace so you can resolve any SideKick agent's
+identity/reputation with zero hardcoding. This completes the agentic loop —
+**discover (`venue`) → pay (gas-free Nanopayment) → record (reputation)** — and it's the same
+ERC-8004 standard Arc's agentic-economy track is built on. The payment hook ERC-8004 references *is*
+x402, which is exactly the rail §6's margin calls already run on.
+
+```ts
+// Record (the loop's third leg): anchor a settled Nanopayment as on-chain reputation.
+const r = await sk.answerMarginCall(m);                 // pay (gas-free), returns r.transaction
+if (r.settled && r.transaction) await sk.recordPayment(id.agentId, { txHash: r.transaction, market: m });
+const rep = await sk.reputationSummary(id.agentId);     // { count, value, valueDecimals }
+```
 
 ## 7. The `MarketBlockState` shape (what every block/REST read returns)
 
@@ -173,7 +203,7 @@ interface MarketBlockState {
 
 | Method + path | Returns | Notes |
 |---|---|---|
-| `GET /venue` | `VenueDescriptor` | Self-description: markets, params, addresses, cadence, units, live snapshot |
+| `GET /venue` | `VenueDescriptor` | Self-description: markets, params, addresses, **erc8004 registries**, cadence, units, live snapshot |
 | `GET /status` | `EngineStatus` | running, chainId, operator, markets, cadence, totals, ticks |
 | `GET /state` | `MarketBlockState[]` | Latest state for every running market |
 | `GET /state/:market` | `MarketBlockState` / 404 | 404 before the first checkpoint |
@@ -205,9 +235,10 @@ A complete, runnable version (with re-centering, close-out, and the `--new-key` 
 ## 10. Trade from an LLM (MCP)
 
 Every capability above is exposed as MCP tools by [`@sidekick/mcp`](packages/mcp), so any MCP client
-(Claude, etc.) can trade on SideKick by calling tools — `sidekick_venue`, `sidekick_onboard`,
-`sidekick_open`, `sidekick_close`, `sidekick_account`, `sidekick_state`, `sidekick_answer_margin_call`.
-See that package's README for wiring.
+(Claude, etc.) can trade on SideKick by calling tools — `sidekick_venue`, `sidekick_identity`,
+`sidekick_onboard`, `sidekick_open`, `sidekick_close`, `sidekick_account`, `sidekick_state`,
+`sidekick_answer_margin_call`, `sidekick_record_payment`, `sidekick_reputation`. See that package's
+README for wiring.
 
 ## 11. Gotchas
 

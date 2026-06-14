@@ -22,6 +22,8 @@
     "test": "bun run --filter '*' test",
     "sim": "bun run --filter '@sidekick/engine' sim",
     "engine": "bun run --filter '@sidekick/engine' dev",
+    "web": "bun run --filter '@sidekick/web' dev",
+    "web:build": "bun run --filter '@sidekick/web' build",
     "fund": "bun run --filter '@sidekick/agents' fund",
     "demo": "bun run --filter '@sidekick/agents' demo",
     "example": "bun run examples/standalone-agent.ts",

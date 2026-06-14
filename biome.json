@@ -16,7 +16,8 @@
       "!**/cache",
       "!**/broadcast",
       "!**/lib/forge-std",
-      "!**/lib/openzeppelin-contracts"
+      "!**/lib/openzeppelin-contracts",
+      "!apps/web/src/app/globals.css"
     ]
   },
   "formatter": {

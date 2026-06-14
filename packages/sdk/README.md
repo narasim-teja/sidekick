@@ -72,10 +72,14 @@ new SideKick({
 });
 ```
 
-> **Signer vs nanopayments.** Reads + on-chain acts work with either a `privateKey` or a viem
-> `Account`. The **Gateway nanopayment** path (`answerMarginCall`, Gateway `deposit`) requires a
-> `privateKey`, because Circle's `@circle-fin/x402-batching` SDK signs EIP-3009 authorizations with a
-> raw key, not a viem signer. Pass `privateKey` if your agent answers calls via Gateway.
+> **Signer modes.** Reads, on-chain acts, AND the **Gateway nanopayment** path (`answerMarginCall`,
+> Gateway `deposit`) all work with either a `privateKey` or a viem `Account` (the latter is KMS- and
+> **Circle-MPC-ready** — see [`circle-account.ts`](src/circle-account.ts), the no-raw-key custody path
+> the demo fleet, MCP server, and example all use). The nanopayment is signer-only via the x402 batch
+> scheme, so no raw key is needed. The one exception is the raw Circle `GatewayClient` *handle*
+> (`gateway()` / `gatewayBalance()`), whose constructor takes a raw key — that, and only that, needs
+> `privateKey`. To broadcast writes through Circle's MPC API, also pass a `broadcaster` (from
+> `circleSigner`/`circleBroadcaster`).
 
 ---
 
@@ -85,8 +89,9 @@ The SDK serves three consumer modes from one core — useful to know for the dem
 
 1. **A developer's own agent (primary).** Write a TS bot, `new SideKick({...})`, hang a loop off
    `sk.on("block")`. This is exactly what the five demo agents in `@sidekick/agents` are — the SDK's
-   first real consumers. **This is what scales to 10–30 agents**: N processes, each a `SideKick` with
-   its own HD-derived key (see `@sidekick/sdk/keys`).
+   first real consumers. They sign through **Circle developer-controlled (MPC) wallets** (no raw key in
+   process); see [`circle-account.ts`](src/circle-account.ts). **This is what scales to 10–30 agents**:
+   N processes, each a `SideKick` bound to its own Circle wallet.
 2. **An MCP-capable agent (e.g. Claude via a connector) — the "any agent can trade" stretch.** Expose
    the SDK verbs (`open`, `close`, `getState`, `answerMarginCall`, `onboard`) as **MCP tools** behind a
    small MCP server; then any MCP host (Claude Desktop, a Claude connector, Cursor, another framework)
@@ -98,18 +103,29 @@ The SDK serves three consumer modes from one core — useful to know for the dem
 
 ---
 
-## Keys — fleet identities from one seed
+## Custody — Circle MPC wallets (the demo fleet) + the self-sovereign seam
 
-`@sidekick/sdk/keys` derives any number of agent EOAs from a single BIP-39 mnemonic via the standard
-Ethereum HD path (`m/44'/60'/0'/0/<index>`), so spinning up 10 or 30 agents is just enumerating
-indices off one seed — one funding pass tops them all up, and the demo is reproducible.
+The demo fleet (`@sidekick/agents`), the MCP server, and the example all sign through **Circle
+developer-controlled (MPC) wallets** — the key is 2-of-2 MPC held by Circle and never materializes in
+the process. Adapt one into a viem account with [`@sidekick/sdk/circle`](src/circle-account.ts):
 
 ```ts
-import { deriveDemoAgents, deriveFleet, generateAgentsMnemonic } from "@sidekick/sdk/keys";
+import { SideKick } from "@sidekick/sdk";
+import { circleSigner } from "@sidekick/sdk/circle";
 
-const mnemonic = generateAgentsMnemonic();        // save as AGENTS_MNEMONIC, fund index 0
-const { long, short, mm, funding, dark } = deriveDemoAgents(mnemonic);  // indices 1..5
-const fleet = deriveFleet(mnemonic, 30);          // 30 anonymous agents at indices 1..30
+const { account, broadcaster } = await circleSigner({ walletId, apiKey, entitySecret });
+const sk = new SideKick({ account, broadcaster, engineUrl });   // trades + answers calls, no raw key
+```
+
+For a **self-sovereign** agent that brings its own key, `@sidekick/sdk/keys` derives EOAs from a single
+BIP-39 mnemonic via the standard Ethereum HD path (`m/44'/60'/0'/0/<index>`) — handy for local
+self-custody bots and N-agent scale/load tests (it is NOT how the demo fleet signs):
+
+```ts
+import { deriveFleet, generateAgentsMnemonic } from "@sidekick/sdk/keys";
+
+const mnemonic = generateAgentsMnemonic();         // your own seed — you hold it
+const fleet = deriveFleet(mnemonic, 30);           // 30 self-custodied agents at indices 1..30
 ```
 
 ---

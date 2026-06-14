@@ -22,17 +22,20 @@ The **behaviours are fixed**; the **policy knobs** (sizing, leverage, staging, d
 ## Run it
 
 Prereqs: the **engine running** (`bun run engine` from the repo root, or `bun run dev` in
-`packages/engine`) and a funded seed.
+`packages/engine`) and the fleet's **Circle wallets** created + funded. The fleet signs through Circle
+developer-controlled (MPC) wallets only — there is no HD/seed fallback.
 
 ```bash
-# 0. (first time) generate a seed, put it in .env as AGENTS_MNEMONIC, and fund index 0 (the funder)
-#    at https://faucet.circle.com. Without AGENTS_MNEMONIC a PUBLIC dev seed is used (local only).
-bun -e "import {generateAgentsMnemonic} from '@sidekick/sdk/keys'; console.log(generateAgentsMnemonic())"
+# 0. (first time) create a Circle wallet SET + 5 wallets (one per role), then set their ids in .env as
+#    CIRCLE_WALLET_ID_LONG/_SHORT/_MM/_FUNDING/_DARK (or CIRCLE_AGENT_WALLET_IDS=id1,…,id5 in that
+#    order), plus CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET. Fund EACH wallet's address with Arc-testnet
+#    USDC at https://faucet.circle.com (USDC is gas + collateral on Arc).
+cd ../sdk && bun run circle:wallets --name sidekick-agents --count 5 && cd ../agents
 
-# 1. onboard all five agents from the one seed (transfer USDC → each agent, then Vault + Gateway deposit)
+# 1. onboard all five agents (each Circle wallet deposits its own balance → Vault + Gateway)
 bun run fund                      # or: bun run --filter @sidekick/agents fund
-bun run fund -- --dry             # print the funding plan without sending
-bun run fund -- --only long,mm    # fund a subset
+bun run fund -- --dry             # print each wallet's address + the amount it needs, without sending
+bun run fund -- --only long,mm    # onboard a subset
 
 # 2. run the scripted scenario (Doc 3 §11): seeds the pool, then runs all five agents with narration
 bun run demo                      # or: bun run --filter @sidekick/agents demo
@@ -43,7 +46,14 @@ bun run agent:funding             # the hero
 bun run agent:dark                # watch it decrement after it goes silent
 ```
 
-Config (all via `.env`, see `.env.example`): `AGENTS_MNEMONIC`, `ENGINE_URL`, `AGENT_MARKET`.
+Config (all via `.env`, see `.env.example`): `CIRCLE_API_KEY`, `CIRCLE_ENTITY_SECRET`, the per-role
+`CIRCLE_WALLET_ID_*` (or `CIRCLE_AGENT_WALLET_IDS`), `ENGINE_URL`, `AGENT_MARKET`. Missing/partial
+Circle config fails loud with the exact var to set — no silent fallback.
+
+> **Unfunded agent?** If a role's Circle wallet holds no USDC it simply can't onboard or open — it
+> holds no position and doesn't trade (the deposit/open reverts, logged, no crash). And an agent that
+> later can't answer a margin call just **decrements smoothly** (the no-liquidation design), it doesn't
+> error. So "no funds → no trades" is the worst case; nothing breaks.
 
 ---
 
@@ -53,12 +63,18 @@ Doc 2 §4.1 flags an ordering choice and recommends one — **we took it**: the 
 **first**, and these agents are its first real consumer. They act exclusively through `@sidekick/sdk`,
 never against the raw engine API — so the SDK surface is validated by real use, with no rework.
 
-## Keys & scale (10–30 agents)
+## Custody & scale (Circle MPC wallets)
 
-Every agent is its own EOA derived from one `AGENTS_MNEMONIC` via the HD path (`@sidekick/sdk/keys`).
-The named demo agents are indices 1–5; the funder is index 0. Scaling to 30 agents is just deriving 30
-indices — `bun run fund` walks them, and `deriveFleet(mnemonic, 30)` gives an anonymous fleet for load
-tests. No per-agent key files, fully reproducible.
+Every agent signs through its own **Circle developer-controlled (MPC) wallet** — the key is 2-of-2 MPC
+held by Circle and never in this process; the operator's entity secret authorizes signing. Each role
+maps to a Circle `walletId` (`CIRCLE_WALLET_ID_LONG/_SHORT/_MM/_FUNDING/_DARK`, or an ordered
+`CIRCLE_AGENT_WALLET_IDS` list). `circleSkForRole(role)` in `config.ts` is the one seam that turns a
+role into a Circle-backed `SideKick`; the runners + every script funnel through it. Scaling to N agents
+is creating N Circle wallets (`bun run circle:wallets` in `@sidekick/sdk`) and funding their addresses.
+
+> There is **no HD/mnemonic or raw-key fallback** for the fleet. (The SDK still exposes
+> `@sidekick/sdk/keys` as a generic self-sovereign/scale-test utility, but the demo agents do not use
+> it.) See the custody note in the SDK README.
 
 ## Margin-call path (the answered AskUserQuestion)
 
@@ -94,12 +110,12 @@ policy.ts      the AgentPolicy primitive (pure decide(ctx) → action)
 policies.ts    the 5 archetypes (directional / mm / fundingStrategy / dark) — pure, unit-tested
 scenario.ts    per-role sizing/leverage/staging (the Doc 3 §11 script) + policyForRole()
 runner.ts      AgentRunner — the autonomous shell: subscribe → answer calls → decide → act
-factory.ts     role → HD key → SideKick client → AgentRunner
-config.ts      env loading (mnemonic, engine url, market)
+factory.ts     role → Circle MPC wallet → SideKick client → AgentRunner
+config.ts      env loading + circleSkForRole/requireCircleFleet (the Circle custody seam), engine url, market
 run-one.ts     the shared body of each `agent:<role>` entry
 agents/*.ts    the five standalone runnable entries
-orchestrator.ts  the `bun run demo` scenario (seeds the pool, runs all five, narrates)
-scripts/fund.ts  the `bun run fund` onboarding (HD keys → transfer → Vault + Gateway deposit)
+orchestrator.ts  the `bun run demo` scenario (seeds the pool from the funding wallet, runs all five, narrates)
+scripts/fund.ts  the `bun run fund` onboarding (each Circle wallet → Vault + Gateway deposit)
 ```
 
 ## Tests

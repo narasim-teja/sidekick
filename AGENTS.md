@@ -25,22 +25,33 @@ skew is the structural yield.
 
 ## 1. Connect
 
+The recommended custody path is a **Circle developer-controlled (MPC) wallet** — the agent's key is
+2-of-2 MPC held by Circle and never materializes in your process:
+
 ```ts
 import { SideKick } from "@sidekick/sdk";
+import { circleSigner } from "@sidekick/sdk/circle";
 
+const { account, broadcaster } = await circleSigner({
+  apiKey: process.env.CIRCLE_API_KEY!,
+  entitySecret: process.env.CIRCLE_ENTITY_SECRET!,
+  walletId: process.env.CIRCLE_WALLET_ID!,   // a funded Arc-testnet Circle wallet
+});
 const sk = new SideKick({
-  network: "arc-testnet",                  // only live network (chain 5042002)
-  privateKey: process.env.AGENT_PRIVATE_KEY as `0x${string}`,
-  engineUrl: "http://localhost:8787",      // the engine REST+WS base (default)
+  network: "arc-testnet",                    // only live network (chain 5042002)
+  account,
+  broadcaster,                               // routes writes through Circle's MPC tx API
+  engineUrl: "http://localhost:8787",        // the engine REST+WS base (default)
 });
 ```
 
-You can also pass a viem `account` instead of `privateKey` (KMS / hardware-wallet / Circle-Wallet
-ready). The gas-free **Nanopayment** flow (`answerMarginCall`) works either way — with an `account`
-it signs the EIP-3009 authorization through your signer, so a real agent never hands over (or even
-materializes) a raw key. Only the *raw* `gateway().deposit(...)` handle needs a `privateKey` (Circle's
-convenience `GatewayClient` constructor takes one). Collateral is **Arc-testnet USDC** (`0x3600…0000`),
-which is also the gas token, so a funded account needs only USDC.
+A **self-sovereign** agent can instead bring its own key — pass `privateKey` (or any viem `account`,
+KMS / hardware-wallet ready) and omit `broadcaster`. The gas-free **Nanopayment** flow
+(`answerMarginCall`) works either way — with an `account` it signs the EIP-3009 authorization through
+your signer, so a real agent never hands over (or even materializes) a raw key. Only the *raw*
+`gateway().deposit(...)` handle needs a `privateKey` (Circle's convenience `GatewayClient` constructor
+takes one). Collateral is **Arc-testnet USDC** (`0x3600…0000`), which is also the gas token, so a
+funded account needs only USDC.
 
 ## 2. Discover the venue (`sk.venue()`)
 
@@ -229,7 +240,7 @@ sk.on("block", async (state) => {                            // 3. observe → 4
 });
 ```
 
-A complete, runnable version (with re-centering, close-out, and the `--new-key` on-ramp) is
+A complete, runnable version (with re-centering and close-out, signed by a Circle MPC wallet) is
 [`examples/standalone-agent.ts`](examples/standalone-agent.ts) — `bun run example`.
 
 ## 10. Trade from an LLM (MCP)

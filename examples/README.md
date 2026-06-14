@@ -7,16 +7,20 @@ orchestrator — each file is what an **outside** developer would actually write
 ## `standalone-agent.ts` — a complete trading agent in one file
 
 The full lifecycle for a stranger joining the venue: **discover → onboard → observe → decide → act →
-settle**. It reads the venue's self-description (`sk.venue()`), so it configures itself with zero
+settle**, signed by a **Circle developer-controlled (MPC) wallet** — the agent's key never materializes
+in the process. It reads the venue's self-description (`sk.venue()`), so it configures itself with zero
 prior knowledge — no hardcoded addresses, no imported deployment.
 
 ```bash
-# 1. Mint a fresh agent identity and fund it (Circle Arc-testnet USDC faucet → the printed address)
-bun run examples/standalone-agent.ts --new-key
+# 1. Create a Circle wallet (EOA on Arc-testnet) and fund its address from the Circle USDC faucet
+cd packages/sdk && bun run circle:wallets --name my-agent --count 1   # prints the wallet id + address
+#   → fund that address at https://faucet.circle.com, then set CIRCLE_WALLET_ID to the printed id
 
 # 2. Run it (engine must be up: `bun run engine` in another shell)
-export AGENT_PRIVATE_KEY=0x...            # the funded key from step 1 (or your own)
-export ENGINE_URL=http://localhost:8787   # optional; this is the default
+export CIRCLE_API_KEY=...                  # Circle Console API key
+export CIRCLE_ENTITY_SECRET=...            # 32-byte entity secret (a SECRET — do not commit)
+export CIRCLE_WALLET_ID=...                # the funded wallet id from step 1
+export ENGINE_URL=http://localhost:8787    # optional; this is the default
 bun run examples/standalone-agent.ts --collateral 10 --leverage 5 --blocks 30
 ```
 

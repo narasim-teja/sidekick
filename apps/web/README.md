@@ -67,7 +67,7 @@ All `NEXT_PUBLIC_*` and inlined at build time (static export):
 | --- | --- | --- |
 | `NEXT_PUBLIC_ENGINE_URL` | `http://localhost:8787` | Engine REST base. |
 | `NEXT_PUBLIC_ENGINE_WS` | derived from the URL (`http→ws` + `/ws`) | WS stream URL. |
-| `NEXT_PUBLIC_AGENTS` | — | Optional JSON `{address: role}` map to label a custom live fleet. The default dev-mnemonic demo agents are recognized out-of-the-box. |
+| `NEXT_PUBLIC_AGENTS` | — | JSON `{address: role}` map to label the live (Circle-wallet) fleet by role. Absent it, the replay-fixture demo addresses are still labelled out-of-the-box. |
 
 ## Deploy (Vercel or any static host)
 

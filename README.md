@@ -216,17 +216,19 @@ if (await sk.owed("ETH-PERP") > 0n) await sk.answerMarginCall("ETH-PERP");  // g
 ```
 
 **2. A runnable example** — [`examples/standalone-agent.ts`](examples/standalone-agent.ts): the full
-discover → onboard → observe → decide → act → settle loop in one file, with a `--new-key` on-ramp.
+discover → onboard → observe → decide → act → settle loop in one file, signed by a **Circle
+developer-controlled (MPC) wallet** (no raw key in process).
 
 ```bash
-bun run example --new-key            # mint + print a fundable agent address
-AGENT_PRIVATE_KEY=0x... bun run example --collateral 10 --leverage 5 --blocks 30
+cd packages/sdk && bun run circle:wallets --name my-agent --count 1   # create a wallet; fund its address
+CIRCLE_API_KEY=... CIRCLE_ENTITY_SECRET=... CIRCLE_WALLET_ID=... \
+  bun run example --collateral 10 --leverage 5 --blocks 30
 ```
 
 **3. MCP** — `@sidekick/mcp` exposes every capability as MCP tools, so any LLM (Claude, etc.) trades
 on SideKick by calling tools (`sidekick_venue`, `sidekick_open`, `sidekick_answer_margin_call`, …).
-`SIDEKICK_PRIVATE_KEY=0x... bun run mcp`, or wire it into an MCP client — see
-[`packages/mcp`](packages/mcp).
+`CIRCLE_API_KEY=... CIRCLE_ENTITY_SECRET=... CIRCLE_WALLET_ID=... bun run mcp`, or wire it into an MCP
+client — see [`packages/mcp`](packages/mcp).
 
 The venue is **self-describing**: `GET /venue` (or `sk.venue()`) returns the live markets, their
 params, the on-chain addresses, the cadence, the units, and a live headline snapshot — so an agent

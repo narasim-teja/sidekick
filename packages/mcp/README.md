@@ -26,16 +26,20 @@ is safe — the venue decrements the position smoothly instead of liquidating. S
 
 ## Run
 
-The server signs with one account (`SIDEKICK_PRIVATE_KEY`, a funded Arc-testnet EOA — USDC is the gas
-token) and talks to the engine at `ENGINE_URL` (default `http://localhost:8787`).
+The server signs through a **Circle developer-controlled (MPC) wallet** (`CIRCLE_API_KEY` +
+`CIRCLE_ENTITY_SECRET` + `CIRCLE_WALLET_ID`, a funded Arc-testnet Circle wallet — USDC is the gas
+token) and talks to the engine at `ENGINE_URL` (default `http://localhost:8787`). There is no raw-key
+fallback. No wallet yet? `cd ../sdk && bun run circle:wallets --name sidekick-mcp --count 1`, then fund
+the printed address.
 
 ```bash
-SIDEKICK_PRIVATE_KEY=0x... bun run src/index.ts     # or, from the repo root: bun run mcp
+CIRCLE_API_KEY=... CIRCLE_ENTITY_SECRET=... CIRCLE_WALLET_ID=... bun run src/index.ts   # or: bun run mcp
 ```
 
 ## Configure in an MCP client
 
-Point the client at this server over stdio, with the key in its env. Example (`claude_desktop_config.json`):
+Point the client at this server over stdio, with the Circle creds in its env. Example
+(`claude_desktop_config.json`):
 
 ```json
 {
@@ -44,7 +48,9 @@ Point the client at this server over stdio, with the key in its env. Example (`c
       "command": "bun",
       "args": ["run", "/absolute/path/to/sidekick/packages/mcp/src/index.ts"],
       "env": {
-        "SIDEKICK_PRIVATE_KEY": "0x...",
+        "CIRCLE_API_KEY": "...",
+        "CIRCLE_ENTITY_SECRET": "...",
+        "CIRCLE_WALLET_ID": "...",
         "ENGINE_URL": "http://localhost:8787"
       }
     }
@@ -56,7 +62,7 @@ Then ask the model things like *"describe the SideKick venue,"* *"onboard with 2
 5 to Gateway,"* *"open a 10 USDC 5x long on the market with the best funding,"* or *"check my account
 and answer any margin call."*
 
-> Keep the private key in the MCP client's env, never in a tool argument. stdout is the JSON-RPC
+> Keep the entity secret in the MCP client's env, never in a tool argument. stdout is the JSON-RPC
 > channel; the server logs to stderr only.
 
 ## Tests

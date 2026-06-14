@@ -21,16 +21,18 @@ function fakeCircle(): { signer: CircleSigner; calls: string[] } {
       calls.push(`getWallet:${id}`);
       return { data: { wallet: { address: ADDRESS } } };
     },
-    async signMessage({ walletId, message }) {
-      calls.push(`signMessage:${walletId}:${message}`);
+    async signMessage({ walletId, message, encodedByHex }) {
+      calls.push(`signMessage:${walletId}:${message}:hex=${encodedByHex ?? false}`);
       return { data: { signature: SIG } };
     },
     async signTypedData({ walletId, data }) {
       calls.push(`signTypedData:${walletId}:${data}`);
       return { data: { signature: SIG } };
     },
-    async signTransaction({ walletId }) {
-      calls.push(`signTransaction:${walletId}`);
+    async signTransaction({ walletId, rawTransaction }) {
+      // Record the field name + value so the test can assert the RLP hex lands in `rawTransaction`
+      // (Circle's EVM field) and NOT in `transaction` (a non-EVM JSON object).
+      calls.push(`signTransaction:${walletId}:raw=${rawTransaction}`);
       return { data: { signedTransaction: SIG } };
     },
     async createContractExecutionTransaction({ walletId, contractAddress, abiFunctionSignature }) {
@@ -73,7 +75,20 @@ describe("circleAccount", () => {
     );
     const sig = await account.signMessage({ message: "hello" });
     expect(sig).toBe(SIG);
-    expect(calls).toContain(`signMessage:${WALLET_ID}:hello`);
+    // Plain text → signed as EIP-191 text (encodedByHex omitted/false).
+    expect(calls).toContain(`signMessage:${WALLET_ID}:hello:hex=false`);
+  });
+
+  test("signMessage sets encodedByHex for a {raw} hex message (so Circle signs the bytes, not the text)", async () => {
+    const { signer, calls } = fakeCircle();
+    const account = await circleAccount(
+      { walletId: WALLET_ID, apiKey: "k", entitySecret: "s", address: ADDRESS },
+      signer,
+    );
+    const raw = "0xdeadbeef" as const;
+    await account.signMessage({ message: { raw } });
+    // Regression guard: without encodedByHex Circle would sign the literal "0x…" UTF-8 string.
+    expect(calls).toContain(`signMessage:${WALLET_ID}:${raw}:hex=true`);
   });
 
   test("signTypedData JSON-stringifies the document for Circle (the Gateway nanopayment path)", async () => {
@@ -146,10 +161,12 @@ describe("circleAccount", () => {
       maxPriorityFeePerGas: 1_000_000_000n,
     } as const;
     // sanity: the tx serializes (the adapter does this before calling Circle)
-    expect(serializeTransaction(tx)).toStartWith("0x");
+    const serialized = serializeTransaction(tx);
+    expect(serialized).toStartWith("0x");
     const signed = await account.signTransaction?.(tx);
     expect(signed).toBe(SIG);
-    expect(calls).toContain(`signTransaction:${WALLET_ID}`);
+    // Regression guard: the RLP hex must go in Circle's EVM `rawTransaction` field (not `transaction`).
+    expect(calls).toContain(`signTransaction:${WALLET_ID}:raw=${serialized}`);
   });
 });
 

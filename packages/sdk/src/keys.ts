@@ -1,15 +1,19 @@
 /**
- * Deterministic agent identities from one seed (Doc 2 Phase 4 — "decide whether demo agents
- * pre-onboard via a script or self-onboard"; this is the key-management half of that).
+ * Deterministic agent identities from one seed — the **self-sovereign / scale-test** key utility.
+ *
+ * NOTE: the demo fleet (`@sidekick/agents`), the MCP server, and the example all sign through **Circle
+ * developer-controlled (MPC) wallets** (see `@sidekick/sdk/circle`), NOT this module. This is the
+ * generic seam for an agent that brings its own key (self-custody), or for spinning up N anonymous
+ * EOAs in a load/scale test.
  *
  * The venue's accounts are plain EOAs — a trader, an LP, an MM-agent, an oracle-agent are all the
  * same unified account, distinguished only by what they hold (Doc 1 §3.2). So spinning up 10 or 30
- * autonomous agents is just deriving 10 or 30 EOAs. We derive them all from ONE BIP-39 mnemonic via
- * the standard Ethereum HD path, so:
+ * self-custodied agents is just deriving 10 or 30 EOAs from ONE BIP-39 mnemonic via the standard
+ * Ethereum HD path, so:
  *
- *   - a single `AGENTS_MNEMONIC` (or a generated seed) yields every agent key reproducibly,
+ *   - a single mnemonic (the caller's own — they hold it) yields every agent key reproducibly,
  *   - one funding pass tops up all of them (the deriver enumerates them in order),
- *   - the demo is seeded/reproducible — agent N always has the same address.
+ *   - addresses are reproducible — agent N always has the same address.
  *
  * Path: `m/44'/60'/0'/0/<index>` (the BIP-44 Ethereum convention viem's `mnemonicToAccount` uses by
  * default via `addressIndex`). Index 0 is conventionally the operator/funder; named agents start at 1.
@@ -46,9 +50,10 @@ export interface AgentIdentity {
   /** Checksummed EOA address. */
   address: `0x${string}`;
   /**
-   * The raw private key (0x-hex). Exposed because the Circle `@circle-fin/x402-batching` Gateway SDK
-   * takes a raw key (not a viem signer), and `SideKick`'s nanopayment path needs it. Handle as a
-   * secret — it is derived, not stored, but it IS the spending key for this agent's funds.
+   * The raw private key (0x-hex), for a self-custodied agent that signs with its own key (pass it as
+   * `new SideKick({ privateKey })`). The gas-free nanopayment path is signer-only and does NOT require
+   * this; only the raw Circle `GatewayClient` handle (`gateway()`) does. Handle as a secret — it is
+   * derived, not stored, but it IS the spending key for this agent's funds.
    */
   privateKey: `0x${string}`;
 }
@@ -71,9 +76,9 @@ export function deriveAgent(mnemonic: string, index: number, label?: string): Ag
 }
 
 /**
- * Derive the five named demo agents (long, short, mm, funding, dark) at indices 1..5, in the
- * canonical {@link AGENT_ROLES} order. The orchestrator and per-agent runners share this so a role
- * always maps to the same address across runs.
+ * Derive five named role identities (long, short, mm, funding, dark) at indices 1..5, in the canonical
+ * {@link AGENT_ROLES} order — a convenience for a self-custodied fleet that mirrors the demo roles.
+ * (The demo fleet itself signs through Circle MPC wallets, not these — see the module note.)
  */
 export function deriveDemoAgents(mnemonic: string): Record<AgentRole, AgentIdentity> {
   const out = {} as Record<AgentRole, AgentIdentity>;

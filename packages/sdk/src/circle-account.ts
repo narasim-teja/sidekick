@@ -60,6 +60,8 @@ export interface CircleSigner {
   signMessage(input: {
     walletId: string;
     message: string;
+    /** Circle signs `message` as a hex byte-string (not UTF-8 text) when true — required for viem's `{raw}` form. */
+    encodedByHex?: boolean;
   }): Promise<{ data?: { signature?: string } }>;
   signTypedData(input: {
     walletId: string;
@@ -67,7 +69,8 @@ export interface CircleSigner {
   }): Promise<{ data?: { signature?: string } }>;
   signTransaction(input: {
     walletId: string;
-    transaction: string;
+    /** Hex-encoded (RLP) serialized tx for EVM chains — Circle's EVM field is `rawTransaction`, NOT `transaction` (a JSON object). */
+    rawTransaction: string;
   }): Promise<{ data?: { signature?: string; signedTransaction?: string } }>;
   /**
    * Broadcast a contract call via Circle using `abiFunctionSignature` + `abiParameters` (the proven
@@ -155,13 +158,16 @@ export async function circleBroadcaster(
 ): Promise<Broadcaster> {
   const client = circleClient(config, signer);
   return {
-    async write({ to, abi, functionName, args }): Promise<Hex> {
+    async write({ to, abi, functionName, args, value }): Promise<Hex> {
       const created = await client.createContractExecutionTransaction({
         idempotencyKey: randomUUID(),
         walletId: config.walletId,
         contractAddress: to,
         abiFunctionSignature: abiFunctionSignatureOf(abi, functionName),
         abiParameters: args.map(toAbiParam),
+        // `amount` is Circle's native-value field. Every venue write is nonpayable today, so this is
+        // normally undefined; mapped here so a future payable call isn't silently sent with 0 value.
+        ...(value !== undefined ? { amount: value.toString() } : {}),
         fee: { type: "level", config: { feeLevel } },
       });
       const id = created.data?.id;
@@ -229,15 +235,19 @@ export async function circleAccount(
   const source: CustomSource = {
     address,
     async signMessage({ message }): Promise<Hex> {
-      // viem hands us a string / {raw}; Circle's signMessage takes the EIP-191 message text.
+      // viem hands us a plain string (EIP-191 text) or a `{raw}` hex byte-string. Circle takes the
+      // text directly, but for the hex `{raw}` form it must be told to treat the value as hex bytes
+      // (`encodedByHex`) — otherwise it would sign the literal "0x…" UTF-8 text and produce a
+      // signature over the wrong bytes.
+      const isRaw = typeof message !== "string" && "raw" in message;
       const text =
-        typeof message === "string"
-          ? message
-          : "raw" in message
-            ? (message.raw as Hex)
-            : String(message);
+        typeof message === "string" ? message : isRaw ? (message.raw as Hex) : String(message);
       return mustSig(
-        await client.signMessage({ walletId: config.walletId, message: text }),
+        await client.signMessage({
+          walletId: config.walletId,
+          message: text,
+          ...(isRaw ? { encodedByHex: true } : {}),
+        }),
         "signMessage",
       );
     },
@@ -255,10 +265,12 @@ export async function circleAccount(
       );
     },
     async signTransaction(transaction): Promise<Hex> {
+      // EVM chains: hand Circle the RLP-serialized tx in `rawTransaction` (its hex-encoded EVM field),
+      // NOT `transaction` (which is a JSON Transaction object on non-EVM chains).
       const serialized = serializeTransaction(transaction);
       const res = await client.signTransaction({
         walletId: config.walletId,
-        transaction: serialized,
+        rawTransaction: serialized,
       });
       const signed = res.data?.signedTransaction ?? res.data?.signature;
       if (!signed) throw new Error("Circle signTransaction returned no signed transaction");

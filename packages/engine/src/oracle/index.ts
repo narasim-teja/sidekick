@@ -99,6 +99,16 @@ export class ResilientOracle {
   get isSynthetic(): boolean {
     return this.latchedSynthetic;
   }
+
+  /**
+   * Clear the synthetic latch so the NEXT {@link getMark} re-probes the primary feed immediately
+   * (instead of waiting for the periodic ~150-read re-probe). The loop calls this right after it
+   * successfully pushes a fresh Stork mark on-chain — the engine knows the feed is now fresh, so it
+   * shouldn't keep serving synthetic until the slow re-probe window.
+   */
+  clearFallback(): void {
+    this.latchedSynthetic = false;
+  }
 }
 
 /**

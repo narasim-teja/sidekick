@@ -46,7 +46,15 @@ function loadRootEnv(): void {
       const eq = trimmed.indexOf("=");
       if (eq === -1) continue;
       const key = trimmed.slice(0, eq).trim();
-      const value = trimmed.slice(eq + 1).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      // Strip a single pair of surrounding quotes (dotenv behaviour) — e.g. STORK_API_KEY is a quoted
+      // Basic-auth blob; without this the quotes leak into the HTTP header and Stork returns 401.
+      if (
+        value.length >= 2 &&
+        ((value[0] === '"' && value.at(-1) === '"') || (value[0] === "'" && value.at(-1) === "'"))
+      ) {
+        value = value.slice(1, -1);
+      }
       if (key && process.env[key] === undefined) process.env[key] = value;
     }
   } catch {

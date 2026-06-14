@@ -66,6 +66,26 @@ export async function runMarketTick(
   rt.tick += 1;
   const at = nowMs();
 
+  // 0. Pull-oracle refresh (Stork markets only), on the SAME cadence as the checkpoint below — NOT
+  //    every block (each push is a payable on-chain tx; the docs batch Layer-C for exactly this gas
+  //    reason). Pushing here, BEFORE the mark read at step 1, means the prediction + checkpoint use the
+  //    freshly-pushed value. Chainlink markets are refreshed by the external CRE markfeed workflow, so
+  //    there's nothing to push inline for them. A push failure is non-fatal (pushStorkMark returns
+  //    null) — the engine falls back to the last on-chain mark / synthetic, exactly as before.
+  const isCheckpointTick = rt.tick % deps.checkpointEveryBlocks === 0;
+  if (isCheckpointTick && rt.oracle.primarySource === "stork") {
+    const tx = await venue.pushStorkMark(rt.config.asset);
+    if (tx) {
+      await venue.confirm(tx);
+      // The feed is now fresh on-chain — clear any synthetic latch so the getMark below re-probes the
+      // primary immediately (rather than serving synthetic until the slow periodic re-probe).
+      rt.oracle.clearFallback();
+      deps.log?.(`[${rt.symbol}] pushed Stork mark (${rt.config.asset}) ${tx}`);
+    } else {
+      deps.log?.(`[${rt.symbol}] Stork push skipped (no key / fetch failed) — using last/synthetic mark`);
+    }
+  }
+
   // 1. Mark.
   const mark = await rt.oracle.getMark();
   const markWad = mark.price18;
@@ -103,7 +123,7 @@ export async function runMarketTick(
 
   // 6. Authoritative on-chain checkpoint at the cadence (skip ticks in between — graceful fallback).
   let checkpoint: MarketBlockState["checkpoint"];
-  const shouldCheckpoint = accounts.length > 0 && rt.tick % deps.checkpointEveryBlocks === 0;
+  const shouldCheckpoint = accounts.length > 0 && isCheckpointTick;
   if (shouldCheckpoint) {
     try {
       const txHash = await venue.checkpoint(rt.symbol, markWad, accounts);

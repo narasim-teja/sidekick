@@ -19,6 +19,7 @@ import {
   type VenueDeployment,
 } from "@sidekick/shared";
 import type { Account, Address, Chain, Hex, PublicClient, Transport, WalletClient } from "viem";
+import { refreshStorkMarks } from "../oracle/stork.ts";
 import { PERP_ENGINE_ABI, POOL_ABI, VAULT_ABI } from "./abis.ts";
 
 /** Position side as decoded from the on-chain enum (0 Flat, 1 Long, 2 Short). */
@@ -167,6 +168,23 @@ export class Venue {
       chain: this.wallet.chain,
       account: this.wallet.account,
     });
+  }
+
+  /**
+   * Push a fresh Stork mark on-chain for an asset (the pull-oracle update). Fetches a fresh signed
+   * price over REST and lands it via `updateTemporalNumericValuesV1` on the shared Stork contract,
+   * paying the update fee from the operator wallet (USDC gas on Arc). Returns the tx hash, or `null`
+   * if the push could not be made (no `STORK_API_KEY`, fetch error) — the caller treats that as
+   * non-fatal and falls back to the last on-chain mark / synthetic. Reuses the venue's existing
+   * public + operator wallet clients.
+   */
+  async pushStorkMark(asset: string): Promise<Hex | null> {
+    try {
+      const { txHash } = await refreshStorkMarks(this.pub, this.wallet, [asset]);
+      return txHash;
+    } catch {
+      return null;
+    }
   }
 
   /** Wait for a tx to land and return its receipt status. */

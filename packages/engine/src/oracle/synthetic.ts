@@ -28,11 +28,12 @@ import { mulberry32 } from "../sim/price.ts";
  * in the live set today).
  */
 export const SYNTHETIC_ANCHORS: Record<string, number> = {
-  BTCUSD: 70_000,
+  BTCUSD: 64_400, // Stork testnet value (live, verified)
   ETHUSD: 1_675,
   SOLUSD: 180,
   HYPEUSD: 35,
   LINKUSD: 7.9,
+  XAUUSD: 4_218, // gold — Stork testnet value (live, verified)
 };
 
 /** A standard-normal shock via Box–Muller, driven by a [0,1) PRNG (matches sim/price.ts). */

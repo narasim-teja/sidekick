@@ -11,13 +11,15 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "fund": "bun run src/scripts/fund.ts",
+    "reset": "bun run src/scripts/reset.ts",
     "register:identities": "bun run src/scripts/register-identities.ts",
     "demo": "bun run src/orchestrator.ts",
     "agent:long": "bun run src/agents/long.ts",
     "agent:short": "bun run src/agents/short.ts",
     "agent:mm": "bun run src/agents/mm.ts",
     "agent:funding": "bun run src/agents/funding.ts",
-    "agent:dark": "bun run src/agents/dark.ts"
+    "agent:dark": "bun run src/agents/dark.ts",
+    "agent:payer": "bun run src/agents/payer.ts"
   },
   "dependencies": {
     "@sidekick/sdk": "workspace:*",

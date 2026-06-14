@@ -169,6 +169,48 @@ export function getMarket(symbol: MarketSymbol): MarketConfig {
   return market;
 }
 
+/**
+ * Resolve the maintenance fraction `m` to use at runtime: the `DEMO_MAINTENANCE_M` env override if
+ * set, else the swept production default ({@link DEFAULT_PARAMS}.m = 1%). This is a single dial, not
+ * a permanent change to the swept constant.
+ *
+ * WHY this knob exists: a margin call (and therefore the headline x402 nanopayment that answers it)
+ * only fires when `equity < m·N`. At the production m = 1% an agent's equity must fall ~99% of the
+ * way to zero before it is ever called — unreachable under the gentle price moves of a short demo, so
+ * the nanopayment flow stays silent. Raising m (e.g. 0.10 = 10%) lifts the call line into reach of a
+ * modest mark drift so calls — and the continuous agent-driven settlement — actually happen on
+ * camera. The engine applies the SAME value off-chain (the reconcile prediction) and on-chain (via
+ * `MarketRegistry.setParams` at boot), so the prediction stays an exact mirror of the contract.
+ * Unset the env to return to the swept 1% — switching is one config value, no code change.
+ */
+export function resolveMaintenanceM(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.DEMO_MAINTENANCE_M;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_PARAMS.m;
+  const m = Number(raw);
+  if (!Number.isFinite(m) || m <= 0 || m >= 1) {
+    throw new Error(
+      `DEMO_MAINTENANCE_M must be a fraction in (0,1) — got "${raw}". Use e.g. 0.10 for 10%.`,
+    );
+  }
+  return m;
+}
+
+/**
+ * Like {@link getMarket} but with the runtime maintenance fraction applied (see
+ * {@link resolveMaintenanceM}). Use this everywhere the engine needs the *effective* params (reconcile
+ * + on-chain sync); `getMarket` still returns the pristine swept config. A no-op (returns the same
+ * params shape) when `DEMO_MAINTENANCE_M` is unset.
+ */
+export function getEffectiveMarket(
+  symbol: MarketSymbol,
+  env: Record<string, string | undefined> = process.env,
+): MarketConfig {
+  const base = getMarket(symbol);
+  const m = resolveMaintenanceM(env);
+  if (m === base.params.m) return base;
+  return { ...base, params: { ...base.params, m } };
+}
+
 // Exported builders so Phase 1 / Phase 2 can re-key a market onto Chainlink without
 // reaching into the literal above.
 export { chainlinkOracle, storkOracle };

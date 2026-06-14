@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "verify:circle": "bun run scripts/verify-circle.ts",
-    "circle:wallets": "bun run scripts/create-sidekick-wallets.ts"
+    "circle:wallets": "bun run scripts/create-sidekick-wallets.ts",
+    "circle:payer-wallet": "bun run scripts/create-payer-wallet.ts"
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "10.6.0",

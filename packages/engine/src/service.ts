@@ -18,9 +18,11 @@ import {
   BLOCK_SECONDS,
   erc8004For,
   FUNDING_PERIOD_SECONDS,
+  getEffectiveMarket,
   getMarket,
   type MarketSymbol,
   marketId as marketIdOf,
+  resolveMaintenanceM,
   resolveOracle,
 } from "@sidekick/shared";
 import { Hono } from "hono";
@@ -37,8 +39,14 @@ import {
 import { Venue } from "./chain/venue.ts";
 import type { Cadence } from "./compute/reconcile.ts";
 import { BLOCK_SECONDS_BIG, ENGINE_VERSION, FUNDING_PERIOD_BIG } from "./config.ts";
-import { type LoopDeps, type MarketRuntime, makeMarketRuntime, runMarketTick } from "./loop.ts";
-import { assertAdapterSource, makeOracle } from "./oracle/index.ts";
+import {
+  type LoopDeps,
+  type MarketRuntime,
+  makeMarketRuntime,
+  runMarketTick,
+  toSettlementEvents,
+} from "./loop.ts";
+import { assertAdapterSource, makeOracle, resolveForceSynthetic } from "./oracle/index.ts";
 import { PaymentLedger } from "./payments/ledger.ts";
 import { paymentRoutes } from "./payments/routes.ts";
 import { GatewaySeller } from "./payments/seller.ts";
@@ -107,7 +115,14 @@ export class EngineService {
     for (const symbol of this.markets) {
       const market = this.venue.market(symbol);
       const oracle = makeOracle(this.pub, getMarket(symbol), market.oracleAdapter, env);
-      this.runtimes.set(symbol, makeMarketRuntime(symbol, oracle));
+      if (oracle.isForcedSynthetic) {
+        this.log(
+          `[${symbol}] MARK_MODE=synthetic — serving the DRIFT walk (drift ${env.SYNTH_DRIFT_PER_BLOCK ?? "0"}/blk, ` +
+            `vol ${env.SYNTH_VOL_PER_BLOCK ?? "default"}/blk), NOT the live feed. Marks are tagged synthetic-fallback. ` +
+            `This is the demo knob that makes margin calls (and x402 nanopayments) fire on camera.`,
+        );
+      }
+      this.runtimes.set(symbol, makeMarketRuntime(symbol, oracle, env));
     }
 
     this.app = this.buildApp();
@@ -122,6 +137,10 @@ export class EngineService {
     // Guard: the on-chain adapter must actually report the source we resolved off-chain, so a
     // `chainlink` resolution can never be read off a StorkAdapter and mislabeled `chainlink-live`.
     await this.assertAdapterSources();
+    // Sync the demo maintenance fraction on-chain so the contract's `m` matches what the engine
+    // predicts off-chain (preserving the §4.3 mirror). No-op unless DEMO_MAINTENANCE_M differs from
+    // what's already deployed; non-fatal if the operator isn't the registry owner.
+    await this.syncMaintenanceMargin();
     await this.tracker.backfill();
     this.log(
       `backfill complete; looping ${this.markets.join(", ")} (checkpoint every ${this.checkpointEveryBlocks} block(s))`,
@@ -163,6 +182,13 @@ export class EngineService {
       this.log(
         `reconcile error @ block ${arcBlock}: ${err instanceof Error ? err.message : String(err)}`,
       );
+      if (this.env.DEBUG_RECONCILE && err instanceof Error) {
+        // Surface the underlying transport failure — the top-level message is a generic
+        // "HTTP request failed"; the `cause` chain (viem) carries the real RPC method/URL/status.
+        const cause = (err as { cause?: unknown }).cause;
+        this.log(`  ↳ detail: ${err.stack?.split("\n").slice(0, 4).join(" | ")}`);
+        if (cause) this.log(`  ↳ cause: ${cause instanceof Error ? cause.message : String(cause)}`);
+      }
     } finally {
       this.busy = false;
       const next = this.pendingBlock;
@@ -180,11 +206,49 @@ export class EngineService {
   private async assertAdapterSources(): Promise<void> {
     await Promise.all(
       this.markets.map((symbol) => {
+        // Forced-synthetic markets never read their on-chain adapter, so a provenance cross-check is
+        // moot — skip it (a misregistered but unused adapter shouldn't block a synthetic-mark demo).
+        if (resolveForceSynthetic(symbol, this.env)) return Promise.resolve();
         const market = this.venue.market(symbol);
         const expected = resolveOracle(symbol, this.env).source;
         return assertAdapterSource(this.pub, market.oracleAdapter, expected);
       }),
     );
+  }
+
+  /**
+   * Push the configured maintenance fraction `m` (`DEMO_MAINTENANCE_M`, else the swept 1%) on-chain
+   * for every market, so `MarketRegistry` agrees with the value the engine reconciles against. This
+   * is the lever that makes margin calls — and the x402 nanopayments that answer them — actually
+   * reachable: at the production m=1% an agent's equity must crater ~99% before it is ever called, so
+   * the headline flow never fires on a gentle mark move. Each market is a no-op if its on-chain `m`
+   * already matches (safe to run every boot). A revert (e.g. the operator isn't the registry owner)
+   * is logged, NOT fatal — the engine still runs, just with whatever `m` is already on-chain (and the
+   * dashboard would then show the off-chain override while the contract calls at the old line; the log
+   * makes that visible). Switching the demo on/off is purely the env value — no code change.
+   */
+  private async syncMaintenanceMargin(): Promise<void> {
+    const m = resolveMaintenanceM(this.env);
+    for (const symbol of this.markets) {
+      try {
+        const res = await this.venue.syncMaintenanceM(symbol, m);
+        if (res.changed) {
+          const ok = await this.venue.confirm(res.txHash as `0x${string}`);
+          const pct = (m * 100).toFixed(2);
+          this.log(
+            ok
+              ? `[${symbol}] maintenance m → ${pct}% on-chain (was ${(Number(res.from) / 1e16).toFixed(2)}%) ${res.txHash}`
+              : `[${symbol}] setParams(m=${pct}%) reverted: ${res.txHash} — contract keeps its old m`,
+          );
+        }
+      } catch (err) {
+        // Most likely the operator wallet isn't the registry owner. Non-fatal: the demo can still run
+        // against the live oracle, but a forced-synthetic margin-call demo needs this to land.
+        this.log(
+          `[${symbol}] could not sync maintenance m on-chain (non-fatal): ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
+        );
+      }
+    }
   }
 
   /** Reconcile every market at the given Arc block. */
@@ -266,7 +330,7 @@ export class EngineService {
   private descriptor(): VenueDescriptor {
     const dep = this.venue.deployment;
     const markets: VenueMarketDescriptor[] = this.markets.map((symbol) => {
-      const cfg = getMarket(symbol);
+      const cfg = getEffectiveMarket(symbol, this.env);
       const md = dep.markets[symbol];
       const s = this.latest.get(symbol);
       // Resolve the oracle from env (not the static MARKETS literal) so /venue reflects the live
@@ -357,7 +421,9 @@ export class EngineService {
       const s = this.latest.get(c.req.param("market") as MarketSymbol);
       return s ? c.json(s) : c.json({ error: "no state yet" }, 404);
     });
-    app.get("/settlement", (c) => c.json(this.ledger.recent(100)));
+    // Serialize to the same JSON-safe SettlementEvent shape the WS stream uses (signed decimal-string
+    // amounts) — `recent()` returns raw bigint-amount Authorizations, which `c.json` cannot stringify.
+    app.get("/settlement", (c) => c.json(toSettlementEvents(this.ledger.recent(100))));
 
     // Layer B: the x402 margin-call pay resource.
     app.route(

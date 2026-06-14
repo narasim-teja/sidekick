@@ -54,6 +54,9 @@ class MockSideKick {
     return { settled: true, amount: "0.01" };
   }
 
+  // NOTE: the runner no longer calls getAccount per block (it derives the view from the WS frame's
+  // positions to avoid saturating the RPC). Kept only to satisfy the SideKick shape; the runner's
+  // view of `side` now comes from what `emit`'d frames carry in `positions` — see `frame(tick, side)`.
   async getAccount(): Promise<AccountView> {
     return {
       address: this.address,
@@ -73,7 +76,7 @@ class MockSideKick {
     leverage: number;
   }): Promise<string> {
     this.opens.push({ side: opts.side, collateral: opts.collateral, leverage: opts.leverage });
-    this.side = opts.side; // reflect the new position so the policy holds next block
+    this.side = opts.side; // reflect the new position (the test's next frame should carry it)
     return "0xopen";
   }
 
@@ -91,7 +94,26 @@ class MockSideKick {
   disconnect(): void {}
 }
 
-function frame(tick: number): MarketBlockState {
+const AGENT_ADDR = "0x00000000000000000000000000000000000000aa";
+
+/** A block frame; pass `side` to include the agent's own position (how the runner now reads its side). */
+function frame(tick: number, side: "long" | "short" | "flat" = "flat"): MarketBlockState {
+  const positions =
+    side === "flat"
+      ? []
+      : [
+          {
+            account: AGENT_ADDR,
+            side,
+            notionalBefore: "16",
+            notionalAfter: "16",
+            equity: "4",
+            funding: "0",
+            call: "0",
+            paid: "0",
+            outcome: "healthy" as const,
+          },
+        ];
   return {
     market: "BTC-PERP",
     tick,
@@ -103,7 +125,7 @@ function frame(tick: number): MarketBlockState {
     fundingRate: 0,
     oiLong: "0",
     oiShort: "0",
-    positions: [],
+    positions,
     pool: {
       capital: "100",
       gapFund: "0",
@@ -132,12 +154,51 @@ describe("AgentRunner", () => {
       market: "BTC-PERP",
     });
     runner.start();
-    await mock.emit(frame(1));
-    await mock.emit(frame(2));
-    await mock.emit(frame(3));
+    await mock.emit(frame(1)); // flat → opens long
+    // Subsequent frames now CARRY the agent's position (as the real engine would), so the runner sees
+    // itself as non-flat from the frame and holds — proving it reads side from the frame, not getAccount.
+    await mock.emit(frame(2, "long"));
+    await mock.emit(frame(3, "long"));
     runner.stop();
     expect(mock.opens).toEqual([{ side: "long", collateral: "4", leverage: 4 }]);
     expect(mock.closes).toBe(0);
+  });
+
+  test("derives its side from the frame's positions (no per-block getAccount)", async () => {
+    const mock = new MockSideKick();
+    let getAccountCalls = 0;
+    // Spy: the runner must NOT call getAccount in the per-block decide path anymore.
+    mock.getAccount = async () => {
+      getAccountCalls++;
+      return {
+        address: mock.address,
+        market: "BTC-PERP",
+        side: "flat",
+        entryNotional: "0",
+        entryMark: "0",
+        margin: "0",
+        equity: "0",
+        freeCollateral: "100",
+      };
+    };
+    const runner = new AgentRunner({
+      sk: mock as unknown as SideKick,
+      policy: directionalPolicy({
+        id: "long",
+        side: "long",
+        collateral: "4",
+        leverage: 4,
+        openAt: 0,
+      }),
+      market: "BTC-PERP",
+    });
+    runner.start();
+    // The very first frame already reports the agent holding a long → the open-once policy must NOT
+    // open (it sees itself non-flat purely from the frame).
+    await mock.emit(frame(1, "long"));
+    runner.stop();
+    expect(mock.opens).toHaveLength(0);
+    expect(getAccountCalls).toBe(0); // the RPC-heavy read is gone from the hot path
   });
 
   test("answers a margin call via the SDK when owed", async () => {

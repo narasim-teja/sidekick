@@ -16,7 +16,7 @@
  * `agent:*` entry runs exactly one.
  */
 
-import type { MarketBlockState, MarketSymbol, SideKick } from "@sidekick/sdk";
+import type { AccountView, MarketBlockState, MarketSymbol, SideKick } from "@sidekick/sdk";
 import { isDarkPolicy } from "./policies.ts";
 import type { AgentAction, AgentPolicy } from "./policy.ts";
 
@@ -111,24 +111,22 @@ export class AgentRunner {
 
     // 2. Decide + act (skip if an action is still landing).
     if (!this.actionInFlight) {
-      let view: import("@sidekick/sdk").AccountView;
-      try {
-        view = await this.sk.getAccount(this.market);
-      } catch (err) {
-        this.log(`account read failed: ${errMsg(err)}`);
-        this.onStep?.(step);
-        return;
-      }
+      // Derive the account view from THIS block's frame (the engine already reconciled every position
+      // and broadcast it) instead of a per-block on-chain `getAccount` — which, multiplied across the
+      // fleet, saturates a free-tier RPC into read failures that stall the loop. The policies only
+      // branch on `view.side`, which the frame carries exactly. See {@link viewFromFrame}.
+      const view = this.viewFromFrame(state);
       const action = this.policy.decide({ view, state, block });
       step.action = action;
       if (action.kind !== "none") {
         this.actionInFlight = true;
         try {
           step.tx = await this.act(action, state);
-          // Wait for the position-changing tx to MINE before clearing the in-flight guard, so the
-          // next block's `getAccount` read reflects the new side. Otherwise a flip policy (mm /
-          // funding-strategy, which have no `opened` latch) would see the still-flat pre-mine state
-          // on the next ~2s frame and submit a SECOND open → revert (one-position-per-market).
+          // Wait for the position-changing tx to MINE before clearing the in-flight guard, so by the
+          // time we act again the engine's next frame reflects the new side (the engine re-reads
+          // positions each block, so a mined open shows up on the following frame). Otherwise a flip
+          // policy (mm / funding-strategy, which have no `opened` latch) would still see the pre-mine
+          // flat row in the frame and submit a SECOND open → revert (one-position-per-market).
           if (step.tx) {
             const ok = await this.sk.confirm(step.tx as `0x${string}`);
             if (!ok) {
@@ -172,6 +170,43 @@ export class AgentRunner {
   private shouldAnswer(block: number): boolean {
     if (isDarkPolicy(this.policy)) return !this.policy.isDark(block);
     return this.policy.answersMarginCalls;
+  }
+
+  /**
+   * Build this agent's {@link AccountView} from the block frame the engine already broadcast — no
+   * on-chain read. The engine reconciles every open position each block and includes it in
+   * `state.positions`, so the agent's own row (matched by address) carries everything the policies
+   * consult. A missing row means the agent holds no position this block → flat.
+   *
+   * `freeCollateral` is not part of the frame (it's a Vault balance, not a per-position field) and no
+   * policy reads it, so it is reported as "0" here. If a future policy needs it, read it on-chain on
+   * demand (sparingly) rather than reviving a per-block `getAccount` for the whole fleet.
+   */
+  private viewFromFrame(state: MarketBlockState): AccountView {
+    const me = this.sk.address.toLowerCase();
+    const pos = state.positions.find((p) => p.account.toLowerCase() === me);
+    if (!pos) {
+      return {
+        address: this.sk.address,
+        market: this.market,
+        side: "flat",
+        entryNotional: "0",
+        entryMark: state.mark,
+        margin: "0",
+        equity: "0",
+        freeCollateral: "0",
+      };
+    }
+    return {
+      address: this.sk.address,
+      market: this.market,
+      side: pos.side,
+      entryNotional: pos.notionalAfter,
+      entryMark: state.mark,
+      margin: "0", // not in the frame; unused by policies
+      equity: pos.equity,
+      freeCollateral: "0", // not in the frame; unused by policies
+    };
   }
 }
 

@@ -59,6 +59,11 @@ export class SyntheticOracle implements OracleAdapter {
    */
   readonly source: OracleSource;
   private price: number;
+  private anchor: number;
+  private floor: number;
+  private ceil: number;
+  private readonly minFraction: number;
+  private readonly maxFraction: number;
   private readonly rand: () => number;
   private readonly volPerBlock: number;
   private readonly driftPerBlock: number;
@@ -71,10 +76,21 @@ export class SyntheticOracle implements OracleAdapter {
       driftPerBlock?: number;
       seed?: number;
       source?: OracleSource;
+      /**
+       * Bound the cumulative walk to `[minFraction, maxFraction] · anchor` (default 0.6–1.6). A
+       * sustained demo drift compounds every block, so an unbounded walk crashes the mark to absurd
+       * levels over a long-running engine (e.g. -0.8%/blk → -80% in ~200 blocks), which then breaks
+       * opens (degenerate skew / OI cap). Clamping keeps the mark in a believable band: it still drifts
+       * far enough to trigger margin calls, but bottoms out instead of collapsing — so the demo stays
+       * correct no matter how long the engine has been up.
+       */
+      minFraction?: number;
+      maxFraction?: number;
     } = {},
   ) {
     this.source = opts.source ?? "stork";
-    this.price = opts.start ?? SYNTHETIC_ANCHORS[asset] ?? 100;
+    this.anchor = opts.start ?? SYNTHETIC_ANCHORS[asset] ?? 100;
+    this.price = this.anchor;
     if (opts.start === undefined && SYNTHETIC_ANCHORS[asset] === undefined) {
       // An unknown asset anchors at 100 — visible, not silent, so a misconfigured market is caught.
       console.warn(
@@ -83,16 +99,38 @@ export class SyntheticOracle implements OracleAdapter {
     }
     this.volPerBlock = opts.volPerBlock ?? 0.0006;
     this.driftPerBlock = opts.driftPerBlock ?? 0;
+    this.minFraction = opts.minFraction ?? 0.6;
+    this.maxFraction = opts.maxFraction ?? 1.6;
+    this.floor = this.anchor * this.minFraction;
+    this.ceil = this.anchor * this.maxFraction;
     // Seed off the asset name so each market has its own reproducible path.
     const seed = opts.seed ?? hashSeed(asset);
     this.rand = mulberry32(seed);
+  }
+
+  /**
+   * Re-anchor the walk to a price read live at boot (e.g. the real current ETH/BTC price from the
+   * primary feed), recentering the price + band on it. This makes the DISPLAYED number the real
+   * current price (fixing a stale `SYNTHETIC_ANCHORS` constant) while the walk — and the bounded band
+   * around it — still moves enough to keep margin calls firing. The provenance tag is unaffected (the
+   * resilient wrapper still labels this `synthetic-fallback`; the number is real-current, the source
+   * is honestly "we are walking it"). No-op for a non-finite/non-positive price.
+   */
+  reanchor(price: number): void {
+    if (!Number.isFinite(price) || price <= 0) return;
+    this.anchor = price;
+    this.price = price;
+    this.floor = price * this.minFraction;
+    this.ceil = price * this.maxFraction;
   }
 
   // Returns a resolved promise to satisfy the async OracleAdapter contract (live reads are async)
   // while the synthetic walk itself is synchronous.
   getMark(): Promise<MarkPrice> {
     const shock = this.volPerBlock * gaussian(this.rand);
-    this.price = Math.max(this.price * (1 + this.driftPerBlock + shock), 0.01);
+    const next = this.price * (1 + this.driftPerBlock + shock);
+    // Clamp the cumulative walk to the believable band so a sustained drift can't run the mark away.
+    this.price = Math.min(this.ceil, Math.max(this.floor, Math.max(next, 0.01)));
     return Promise.resolve({
       asset: this.asset,
       price18: floatToWad(this.price),

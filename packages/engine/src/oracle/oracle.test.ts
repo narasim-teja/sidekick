@@ -12,7 +12,7 @@ import {
   ChainlinkNotFoundError,
   isChainlinkNotFound,
 } from "./chainlink.ts";
-import { ResilientOracle } from "./index.ts";
+import { ResilientOracle, resolveForceSynthetic } from "./index.ts";
 import {
   isStorkNotFound,
   mapSignedPrice,
@@ -50,6 +50,70 @@ describe("SyntheticOracle", () => {
     expect(m.price18).toBeGreaterThan(0n);
     // LINK anchor ~18 → price18 on the order of 18e18.
     expect(m.price18 / WAD).toBeGreaterThan(1n);
+  });
+
+  test("a sustained drift is clamped to the band — it never runs the mark away", async () => {
+    // -2%/blk for 500 blocks would crash an unbounded walk to ~0; the floor (50% of the $100 start
+    // here) holds it. This is what keeps a long-running demo's mark believable so opens don't break.
+    const o = new SyntheticOracle("TESTUSD", {
+      start: 100,
+      driftPerBlock: -0.02,
+      volPerBlock: 0,
+      minFraction: 0.5,
+      maxFraction: 1.5,
+    });
+    let last = 0n;
+    for (let i = 0; i < 500; i++) last = (await o.getMark()).price18;
+    expect(last).toBe(50n * WAD); // pinned at the floor, not collapsed toward zero
+    expect(o.currentPrice).toBe(50);
+  });
+
+  test("an upward drift is clamped to the ceiling too", async () => {
+    const o = new SyntheticOracle("TESTUSD", {
+      start: 100,
+      driftPerBlock: 0.02,
+      volPerBlock: 0,
+      minFraction: 0.5,
+      maxFraction: 1.5,
+    });
+    let last = 0n;
+    for (let i = 0; i < 500; i++) last = (await o.getMark()).price18;
+    expect(last).toBe(150n * WAD); // pinned at the ceiling
+  });
+
+  test("reanchor recenters the price + band on the live anchor", async () => {
+    const o = new SyntheticOracle("TESTUSD", {
+      start: 100,
+      driftPerBlock: 0,
+      volPerBlock: 0,
+      minFraction: 0.9,
+      maxFraction: 1.1,
+    });
+    o.reanchor(1676); // real ETH price read at boot
+    expect(o.currentPrice).toBe(1676);
+    const m = await o.getMark();
+    expect(m.price18).toBe(1676n * WAD); // displayed number is now the real price, not the 100 anchor
+    // The band moved with it: a downward drift can't fall below 0.9·1676, not 0.9·100.
+    const down = new SyntheticOracle("TESTUSD", {
+      start: 100,
+      driftPerBlock: -0.02,
+      volPerBlock: 0,
+      minFraction: 0.9,
+      maxFraction: 1.1,
+    });
+    down.reanchor(1676);
+    let last = 0n;
+    for (let i = 0; i < 500; i++) last = (await down.getMark()).price18;
+    // floor = 0.9 · live anchor = 1508.4 (WAD); pinned there, not at 0.9·100.
+    expect(last).toBe(15084n * WAD / 10n);
+  });
+
+  test("reanchor ignores a non-finite / non-positive price (keeps the static anchor)", () => {
+    const o = new SyntheticOracle("TESTUSD", { start: 100 });
+    o.reanchor(0);
+    expect(o.currentPrice).toBe(100);
+    o.reanchor(Number.NaN);
+    expect(o.currentPrice).toBe(100);
   });
 });
 
@@ -165,6 +229,94 @@ describe("ResilientOracle", () => {
     await o.getMark(); // read 2 → synthetic, no probe
     await o.getMark(); // read 3 → re-probe (3 % 3 == 0)
     expect(stork.calls()).toBe(2);
+  });
+
+  test("forceSynthetic serves the drift walk WITHOUT ever touching the live primary", async () => {
+    // The demo knob (MARK_MODE=synthetic): a live feed is too calm to ever trip a margin call, so we
+    // force the drift walk so calls — and the x402 nanopayments answering them — actually fire.
+    const stork = fakeStork("live"); // a perfectly healthy live feed…
+    const o = new ResilientOracle(
+      "TESTUSD",
+      stork.oracle as StorkOracle,
+      new SyntheticOracle("TESTUSD"),
+      150,
+      isStorkNotFound,
+      true, // …forced off in favour of synthetic
+    );
+    const m1 = await o.getMark();
+    const m2 = await o.getMark();
+    expect(m1.provenance).toBe("synthetic-fallback"); // honestly tagged, not passed off as live
+    expect(m2.provenance).toBe("synthetic-fallback");
+    expect(o.isForcedSynthetic).toBe(true);
+    expect(o.isSynthetic).toBe(true);
+    expect(stork.calls()).toBe(0); // the live primary is NEVER read when forced
+  });
+
+  test("forceSynthetic + liveAnchor re-anchors the walk to the real price ONCE, then walks", async () => {
+    // The fix for the "$1,005" complaint: the displayed number becomes the real current price (read
+    // once from the primary at boot), but the badge stays synthetic-fallback and the walk keeps moving.
+    const stork = fakeStork("live"); // primary reports $70,000
+    const o = new ResilientOracle(
+      "TESTUSD",
+      stork.oracle as StorkOracle,
+      new SyntheticOracle("TESTUSD", { start: 100, volPerBlock: 0, driftPerBlock: 0 }), // stale anchor 100
+      150,
+      isStorkNotFound,
+      true, // forceSynthetic
+      true, // liveAnchor
+    );
+    const m1 = await o.getMark();
+    // Re-anchored to the live $70,000, NOT the stale 100 — the displayed number is now believable.
+    expect(m1.price18).toBe(70_000n * WAD);
+    expect(m1.provenance).toBe("synthetic-fallback"); // still honestly tagged
+    const m2 = await o.getMark();
+    expect(m2.price18).toBe(70_000n * WAD); // drift 0 → holds at the live anchor
+    expect(stork.calls()).toBe(1); // the live primary is probed exactly ONCE (boot anchor), not per block
+  });
+
+  test("liveAnchor falls back to the static anchor if the live probe fails", async () => {
+    const stork = fakeStork("notfound"); // primary can't be read
+    const o = new ResilientOracle(
+      "TESTUSD",
+      stork.oracle as StorkOracle,
+      new SyntheticOracle("TESTUSD", { start: 100, volPerBlock: 0, driftPerBlock: 0 }),
+      150,
+      isStorkNotFound,
+      true, // forceSynthetic
+      true, // liveAnchor
+    );
+    const m = await o.getMark();
+    expect(m.price18).toBe(100n * WAD); // kept the static anchor — non-fatal
+    expect(m.provenance).toBe("synthetic-fallback");
+  });
+});
+
+describe("resolveForceSynthetic", () => {
+  test("MARK_MODE=synthetic forces it for every market", () => {
+    expect(resolveForceSynthetic("ETH-PERP", { MARK_MODE: "synthetic" })).toBe(true);
+    expect(resolveForceSynthetic("BTC-PERP", { MARK_MODE: "synthetic" })).toBe(true);
+  });
+
+  test("MARK_MODE=live (or unset) uses the live feed — synthetic only as the failure fallback", () => {
+    expect(resolveForceSynthetic("ETH-PERP", { MARK_MODE: "live" })).toBe(false);
+    expect(resolveForceSynthetic("ETH-PERP", {})).toBe(false);
+  });
+
+  test("the per-market override wins over the global MARK_MODE", () => {
+    // Global says live, but ETH is pinned synthetic (the symbol's non-alphanumerics are stripped).
+    const env = { MARK_MODE: "live", MARK_MODE_ETHPERP: "synthetic" };
+    expect(resolveForceSynthetic("ETH-PERP", env)).toBe(true);
+    expect(resolveForceSynthetic("BTC-PERP", env)).toBe(false);
+    // …and the reverse: global synthetic, one market pinned back to live.
+    const env2 = { MARK_MODE: "synthetic", MARK_MODE_BTCPERP: "live" };
+    expect(resolveForceSynthetic("BTC-PERP", env2)).toBe(false);
+    expect(resolveForceSynthetic("ETH-PERP", env2)).toBe(true);
+  });
+
+  test("the SYNTH_FORCE=1/true alias forces it when MARK_MODE is unset", () => {
+    expect(resolveForceSynthetic("ETH-PERP", { SYNTH_FORCE: "1" })).toBe(true);
+    expect(resolveForceSynthetic("ETH-PERP", { SYNTH_FORCE: "true" })).toBe(true);
+    expect(resolveForceSynthetic("ETH-PERP", { SYNTH_FORCE: "0" })).toBe(false);
   });
 });
 

@@ -205,6 +205,19 @@ export const POOL_ABI = [
 ] as const;
 
 /** MarketRegistry — read a market's params + pool + oracle adapter. */
+/** The `MarketParams` tuple shape, shared by `getParams` / `setParams` (and nested in `getMarket`). */
+const MARKET_PARAMS_TUPLE = {
+  name: "params",
+  type: "tuple",
+  components: [
+    { name: "m", type: "int256" },
+    { name: "alpha", type: "int256" },
+    { name: "lambda", type: "int256" },
+    { name: "rMax", type: "int256" },
+    { name: "k", type: "uint256" },
+  ],
+} as const;
+
 export const MARKET_REGISTRY_ABI = [
   {
     type: "function",
@@ -216,17 +229,7 @@ export const MARKET_REGISTRY_ABI = [
         type: "tuple",
         components: [
           { name: "exists", type: "bool" },
-          {
-            name: "params",
-            type: "tuple",
-            components: [
-              { name: "m", type: "int256" },
-              { name: "alpha", type: "int256" },
-              { name: "lambda", type: "int256" },
-              { name: "rMax", type: "int256" },
-              { name: "k", type: "uint256" },
-            ],
-          },
+          MARKET_PARAMS_TUPLE,
           { name: "pool", type: "address" },
           { name: "oracleAdapter", type: "address" },
           { name: "feedId", type: "bytes32" },
@@ -234,5 +237,24 @@ export const MARKET_REGISTRY_ABI = [
         ],
       },
     ],
+  },
+  {
+    // Hot-path getter for just the economic params (reverts MarketNotFound if unknown).
+    type: "function",
+    name: "getParams",
+    stateMutability: "view",
+    inputs: [{ name: "marketId", type: "bytes32" }],
+    outputs: [MARKET_PARAMS_TUPLE],
+  },
+  {
+    // Owner-only params update — the engine uses this to sync the demo maintenance fraction on-chain.
+    type: "function",
+    name: "setParams",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { ...MARKET_PARAMS_TUPLE, name: "params" },
+    ],
+    outputs: [],
   },
 ] as const;

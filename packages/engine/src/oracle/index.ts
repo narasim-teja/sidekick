@@ -18,6 +18,7 @@ import type { MarketConfig, MarkPrice, OracleAdapter, OracleSource } from "@side
 import { resolveOracle } from "@sidekick/shared";
 import type { Address, PublicClient } from "viem";
 import { ORACLE_ADAPTER_ABI } from "../chain/abis.ts";
+import { wadToFloat } from "../fixed/units.ts";
 import { ChainlinkStreamsOracle, isChainlinkNotFound } from "./chainlink.ts";
 import { isStorkNotFound, StorkOracle } from "./stork.ts";
 import { SyntheticOracle } from "./synthetic.ts";
@@ -57,6 +58,7 @@ export type RecoverablePredicate = (err: unknown) => boolean;
 export class ResilientOracle {
   private latchedSynthetic = false;
   private reads = 0;
+  private liveAnchorTried = false;
 
   constructor(
     readonly asset: string,
@@ -64,11 +66,48 @@ export class ResilientOracle {
     private readonly fallback: SyntheticOracle,
     private readonly reprobeEvery = 150, // ~5 min at 2s blocks
     private readonly isRecoverable: RecoverablePredicate = isStorkNotFound,
+    /**
+     * Force the synthetic walk and never read the live primary feed (`MARK_MODE=synthetic`). This is
+     * a DEMO knob, not the production path: a real feed (BTC/ETH/LINK/gold) barely moves over a few
+     * minutes, so on a live mark no agent's equity ever crosses the 1% maintenance line and the
+     * headline x402 margin-call flow never fires. Forcing the drifting synthetic mark
+     * (`SYNTH_DRIFT_PER_BLOCK`) erodes the levered longs deterministically so calls — and the
+     * nanopayments answering them — actually happen on camera. The mark is still tagged
+     * `synthetic-fallback`, so it is never passed off as a real feed.
+     */
+    private readonly forceSynthetic = false,
+    /**
+     * When forcing synthetic, re-anchor the walk to the REAL current price read once from the primary
+     * feed on the first read (`MARK_MODE=synthetic` + `SYNTH_LIVE_ANCHOR=1`). This makes the DISPLAYED
+     * number the real current price (not a stale `SYNTHETIC_ANCHORS` constant that can drift to an
+     * absurd floor like ETH $1,005), while the bounded walk still moves enough to keep margin calls —
+     * and the nanopayments answering them — firing. The mark stays honestly tagged `synthetic-fallback`
+     * (the number is real-current, but WE are walking it, so it is not the live feed). A failed live
+     * probe falls back silently to the static anchor.
+     */
+    private readonly liveAnchor = false,
   ) {}
 
   /** Read the mark, preferring the live primary feed and falling back to synthetic on a feed miss. */
   async getMark(): Promise<ResolvedMark> {
     this.reads += 1;
+
+    // Forced synthetic (demo): serve the drift walk directly, skipping the live probe entirely.
+    if (this.forceSynthetic) {
+      // One-time: re-anchor the walk to the real current price so the displayed number is believable.
+      if (this.liveAnchor && !this.liveAnchorTried) {
+        this.liveAnchorTried = true;
+        try {
+          const seed = await this.primary.getMark();
+          this.fallback.reanchor(wadToFloat(seed.price18));
+        } catch {
+          // Live probe failed (feed not fresh / RPC) — keep the static anchor. Non-fatal.
+        }
+      }
+      const m = await this.fallback.getMark();
+      return { ...m, provenance: "synthetic-fallback" };
+    }
+
     const shouldReprobe = this.latchedSynthetic && this.reads % this.reprobeEvery === 0;
 
     if (!this.latchedSynthetic || shouldReprobe) {
@@ -95,9 +134,14 @@ export class ResilientOracle {
     return this.primary.source;
   }
 
+  /** Whether the synthetic walk is forced (demo `MARK_MODE=synthetic`), bypassing the live feed. */
+  get isForcedSynthetic(): boolean {
+    return this.forceSynthetic;
+  }
+
   /** Whether this market is currently being served by the synthetic fallback. */
   get isSynthetic(): boolean {
-    return this.latchedSynthetic;
+    return this.forceSynthetic || this.latchedSynthetic;
   }
 
   /**
@@ -135,13 +179,53 @@ export function makeOracle(
   // echoes the configured source so its mark is honestly labeled, not a false "stork".
   const vol = env.SYNTH_VOL_PER_BLOCK ? Number(env.SYNTH_VOL_PER_BLOCK) : undefined;
   const drift = env.SYNTH_DRIFT_PER_BLOCK ? Number(env.SYNTH_DRIFT_PER_BLOCK) : undefined;
+  // Band fractions bound the cumulative walk to [min,max]·anchor — tighten them (e.g. 0.96–1.04) so a
+  // live-anchored mark stays within a few % of the real price instead of drifting to a far floor.
+  const minFraction = env.SYNTH_MIN_FRACTION ? Number(env.SYNTH_MIN_FRACTION) : undefined;
+  const maxFraction = env.SYNTH_MAX_FRACTION ? Number(env.SYNTH_MAX_FRACTION) : undefined;
   const synthetic = new SyntheticOracle(market.asset, {
     source,
     ...(vol !== undefined ? { volPerBlock: vol } : {}),
     ...(drift !== undefined ? { driftPerBlock: drift } : {}),
+    ...(minFraction !== undefined ? { minFraction } : {}),
+    ...(maxFraction !== undefined ? { maxFraction } : {}),
   });
 
-  return new ResilientOracle(market.asset, primary, synthetic, 150, isRecoverable);
+  const forceSynthetic = resolveForceSynthetic(market.symbol, env);
+  // Live-anchor (default ON whenever synthetic is forced): re-anchor the walk to the real current
+  // price at boot so the displayed number is believable. Disable with SYNTH_LIVE_ANCHOR=0.
+  const liveAnchor = forceSynthetic && env.SYNTH_LIVE_ANCHOR !== "0" && env.SYNTH_LIVE_ANCHOR !== "false";
+  return new ResilientOracle(
+    market.asset,
+    primary,
+    synthetic,
+    150,
+    isRecoverable,
+    forceSynthetic,
+    liveAnchor,
+  );
+}
+
+/**
+ * Whether to FORCE the synthetic mark for a market (demo knob, off by default). A live feed barely
+ * moves over a few minutes, so the headline x402 margin-call flow never fires on it; forcing the
+ * drifting synthetic mark (`SYNTH_DRIFT_PER_BLOCK`) makes the levered longs decrement — and pay —
+ * deterministically on camera. Resolution mirrors `ORACLE_SOURCE`:
+ *   - `MARK_MODE=synthetic` (or the `SYNTH_FORCE=1` alias) forces it for ALL markets;
+ *   - `MARK_MODE_<MARKET>=synthetic|live` overrides per market (e.g. `MARK_MODE_ETHPERP=synthetic`).
+ * Any value other than `synthetic` (e.g. `live`) means use the real feed with synthetic only as the
+ * failure fallback — the normal behaviour.
+ */
+export function resolveForceSynthetic(
+  symbol: string,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const perMarketKey = `MARK_MODE_${symbol.replace(/[^A-Z0-9]/gi, "").toUpperCase()}`;
+  const perMarket = env[perMarketKey];
+  if (perMarket !== undefined) return perMarket.toLowerCase() === "synthetic";
+  if (env.MARK_MODE !== undefined) return env.MARK_MODE.toLowerCase() === "synthetic";
+  const alias = env.SYNTH_FORCE?.toLowerCase();
+  return alias === "1" || alias === "true";
 }
 
 /**

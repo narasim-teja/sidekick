@@ -19,8 +19,9 @@ import {
   type VenueDeployment,
 } from "@sidekick/shared";
 import type { Account, Address, Chain, Hex, PublicClient, Transport, WalletClient } from "viem";
+import { floatToWad } from "../fixed/units.ts";
 import { refreshStorkMarks } from "../oracle/stork.ts";
-import { PERP_ENGINE_ABI, POOL_ABI, VAULT_ABI } from "./abis.ts";
+import { MARKET_REGISTRY_ABI, PERP_ENGINE_ABI, POOL_ABI, VAULT_ABI } from "./abis.ts";
 
 /** Position side as decoded from the on-chain enum (0 Flat, 1 Long, 2 Short). */
 export type OnChainSide = "flat" | "long" | "short";
@@ -168,6 +169,53 @@ export class Venue {
       chain: this.wallet.chain,
       account: this.wallet.account,
     });
+  }
+
+  /** Read a market's economic params straight from the registry (on-chain truth, WAD/integer units). */
+  async onChainParams(symbol: MarketSymbol): Promise<{
+    m: bigint;
+    alpha: bigint;
+    lambda: bigint;
+    rMax: bigint;
+    k: bigint;
+  }> {
+    const p = (await this.pub.readContract({
+      address: this.deployment.marketRegistry,
+      abi: MARKET_REGISTRY_ABI,
+      functionName: "getParams",
+      args: [this.marketId(symbol)],
+    })) as { m: bigint; alpha: bigint; lambda: bigint; rMax: bigint; k: bigint };
+    return p;
+  }
+
+  /**
+   * Sync the on-chain maintenance fraction `m` for a market to `mFloat` (e.g. the `DEMO_MAINTENANCE_M`
+   * override), preserving alpha/lambda/rMax/k exactly as deployed. No-op (returns `changed:false`) if
+   * the on-chain `m` already matches, so it is safe to call every boot. Owner-only on-chain — the
+   * operator wallet must be the registry owner or the tx reverts (the caller treats that as non-fatal).
+   * Keeping on-chain `m` equal to the engine's off-chain `m` is what preserves the §4.3 invariant that
+   * the reconcile prediction mirrors `checkpoint` exactly.
+   */
+  async syncMaintenanceM(
+    symbol: MarketSymbol,
+    mFloat: number,
+  ): Promise<{ changed: boolean; from: bigint; to: bigint; txHash?: Hex }> {
+    const current = await this.onChainParams(symbol);
+    const to = floatToWad(mFloat);
+    if (current.m === to) return { changed: false, from: current.m, to };
+    const txHash = await this.wallet.writeContract({
+      address: this.deployment.marketRegistry,
+      abi: MARKET_REGISTRY_ABI,
+      functionName: "setParams",
+      // Full tuple: only `m` changes; the swept alpha/lambda/rMax/k are written back untouched.
+      args: [
+        this.marketId(symbol),
+        { m: to, alpha: current.alpha, lambda: current.lambda, rMax: current.rMax, k: current.k },
+      ],
+      chain: this.wallet.chain,
+      account: this.wallet.account,
+    });
+    return { changed: true, from: current.m, to, txHash };
   }
 
   /**

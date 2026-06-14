@@ -24,9 +24,19 @@ export function arcChain(env: Record<string, string | undefined> = process.env):
   return arcTestnet(env);
 }
 
-/** A public client over HTTP (the default read path; prefers an Alchemy override if set). */
+/**
+ * A public client over HTTP (the default read path; prefers an Alchemy override if set). JSON-RPC
+ * batching is ON: every reconcile tick fans out ~2 reads per account (`positionOf` + `freeCollateral`)
+ * across every market in parallel — dozens of concurrent `eth_call`s each ~2s — which a free-tier RPC
+ * rate-limits into "HTTP request failed", stalling the reconcile (and with it the margin-call /
+ * nanopayment flow). `batch` coalesces those concurrent calls into batched requests, cutting the
+ * request count by ~an order of magnitude so the per-block reads land reliably.
+ */
 export function publicClient(env: Record<string, string | undefined> = process.env): PublicClient {
-  return createPublicClient({ chain: arcChain(env), transport: http(rpcUrl(env)) }) as PublicClient;
+  return createPublicClient({
+    chain: arcChain(env),
+    transport: http(rpcUrl(env), { batch: true }),
+  }) as PublicClient;
 }
 
 /**

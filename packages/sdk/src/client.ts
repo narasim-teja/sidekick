@@ -136,7 +136,13 @@ export class SideKick {
 
     const rpc = config.rpcUrl ?? sharedRpcUrl();
     this.chain = arcTestnet();
-    this.pub = createPublicClient({ chain: this.chain, transport: http(rpc) }) as PublicClient;
+    // Batch JSON-RPC reads: a fleet of agents each polling its account every block (plus the engine)
+    // saturates a free-tier RPC into "HTTP request failed", which stalls the decide/answer loop.
+    // Coalescing concurrent reads into batched requests keeps the per-block reads landing.
+    this.pub = createPublicClient({
+      chain: this.chain,
+      transport: http(rpc, { batch: true }),
+    }) as PublicClient;
     this.wallet = createWalletClient({
       account: this.account,
       chain: this.chain,

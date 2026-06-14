@@ -115,7 +115,9 @@ export function MarketPanel({
         {/* Mark */}
         <div className="col-span-2 flex items-end justify-between">
           <Readout label="Mark" value={fmtMark(state.mark)} size="xl" color="var(--fg)" />
-          <Sparkline data={markHistory} color="var(--signal)" width={140} height={40} />
+          {/* mark line in pool-cyan, not green — keeps the live-green reserved for the funding-curve
+              skew dot below and stops two greens fighting in one panel */}
+          <Sparkline data={markHistory} color="var(--accent-pool)" width={140} height={40} />
         </div>
 
         {/* Funding curve */}
@@ -166,8 +168,9 @@ export function MarketPanel({
               className="flex items-center justify-start px-2 text-[11px] font-semibold tnum transition-[flex-basis] duration-500"
               style={{
                 flexBasis: `${(oiLong / oiTotal) * 100}%`,
-                background: "rgba(56,249,176,0.16)",
+                background: "var(--tint-long)",
                 color: "var(--accent-long)",
+                boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent-long) 22%, transparent)",
               }}
             >
               {usdCompact(oiLong)}
@@ -176,8 +179,9 @@ export function MarketPanel({
               className="flex items-center justify-end px-2 text-[11px] font-semibold tnum transition-[flex-basis] duration-500"
               style={{
                 flexBasis: `${(oiShort / oiTotal) * 100}%`,
-                background: "rgba(255,92,122,0.16)",
+                background: "var(--tint-short)",
                 color: "var(--accent-short)",
+                boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent-short) 22%, transparent)",
               }}
             >
               {usdCompact(oiShort)}

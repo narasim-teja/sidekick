@@ -68,7 +68,7 @@ export function SettlementStream({ feed }: { feed: SettlementEvent[] }) {
                 <li
                   key={`${e.block}-${e.account}-${e.kind}-${e.amount}-${e.at}`}
                   className={`grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 py-1 rounded text-[11px] ${i === 0 ? "streamin" : ""}`}
-                  style={{ background: i % 2 ? "transparent" : "rgba(255,255,255,0.012)" }}
+                  style={{ background: i % 2 ? "transparent" : "var(--row-alt)" }}
                 >
                   <span className="tnum text-[var(--fg-dim)] w-10">#{e.block}</span>
                   <span className="flex items-center gap-1.5 min-w-0">

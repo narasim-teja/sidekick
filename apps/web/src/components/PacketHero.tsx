@@ -33,18 +33,20 @@ export interface HeroNode {
   role: string;
 }
 
+// Mirror the refined CSS signal tokens (globals.css) so the 3D scene speaks the same color language:
+// one hue per meaning, mm distinct from pool, the dark agent muted (not neon violet).
 const KIND_COLOR: Record<AuthorizationKind, number> = {
-  funding: 0xffb454,
-  "auto-settle": 0x57c7ff,
-  "margin-call": 0xff52d9,
+  funding: 0xffb14a,
+  "auto-settle": 0x4ec5ff,
+  "margin-call": 0xfb5bcf,
 };
 
 const ROLE_COLOR: Record<string, number> = {
-  long: 0x38f9b0,
-  short: 0xff5c7a,
-  mm: 0x57c7ff,
-  funding: 0xffb454,
-  dark: 0xb388ff,
+  long: 0x62e6a0,
+  short: 0xff5d79,
+  mm: 0x8aa0ff, // periwinkle — distinct from the pool cyan
+  funding: 0xffb14a,
+  dark: 0x9a8fc4, // muted slate-violet — the agent going silent, not a neon glow
   unknown: 0x9fb0c0,
 };
 

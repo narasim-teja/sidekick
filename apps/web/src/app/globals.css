@@ -18,7 +18,9 @@
 }
 
 :root {
-  /* Surfaces — a graphite-to-black instrument panel. */
+  /* Surfaces — a graphite-to-black instrument panel. Neutrals carry a hair of the brand's cyan hue
+     (chroma toward 220°) so they sit cohesively under the phosphor signals rather than reading as dead
+     gray. */
   --bg: #07090c;
   --bg-panel: #0c1016;
   --bg-panel-2: #11161e;
@@ -29,20 +31,40 @@
   /* Foreground. */
   --fg: #e6edf3;
   --fg-mid: #9fb0c0;
-  --fg-dim: #5d6b7a;
+  --fg-dim: #778595; /* lifted off #5d6b7a → clears AA (4.5:1+) on every panel surface for small print */
 
-  /* Signal palette — committed and distinctive. */
-  --signal: #38f9b0; /* phosphor green — "live", healthy, the heartbeat */
+  /* ── Signal palette — one hue per MEANING, every hue distinct. ──────────────────────────────────
+     The earlier set collided (long==live, mm==pool) and leaned on a generic neon violet for the dark
+     agent — the one tell. Each role now owns a separate, deliberate hue:
+       signal  green     · "live" heartbeat + healthy
+       long    mint      · receive / long side            (distinct from the live green)
+       short   rose      · pay / short side
+       funding amber     · the per-block funding stream
+       pool    cyan      · the pool (universal counterparty)
+       mm      periwinkle· the market-maker               (distinct from pool's cyan)
+       nano    magenta   · the headline x402 nanopayment  (pushed off rose's hue)
+       dark    slate-violet (muted, low-chroma) · the agent going *silent* — drains, doesn't glow.   */
+  --signal: #2ff3a6; /* phosphor green — "live", healthy, the heartbeat */
   --signal-dim: #1c7a5a;
-  --accent-long: #38f9b0; /* longs / receive-side green */
-  --accent-short: #ff5c7a; /* shorts / pay-side rose */
-  --accent-funding: #ffb454; /* funding stream — amber */
-  --accent-mm: #57c7ff; /* market-maker — sky */
-  --accent-dark: #b388ff; /* the dark agent — violet (the one accent earned, not slop) */
-  --accent-pool: #57c7ff; /* pool — cyan */
-  --accent-nano: #ff52d9; /* the headline x402 Gateway nanopayment — magenta */
-  --danger: #ff5c7a;
-  --warn: #ffb454;
+  --accent-long: #62e6a0; /* long / receive — mint, a step off the live green so they never read as one */
+  --accent-short: #ff5d79; /* short / pay — rose */
+  --accent-funding: #ffb14a; /* funding stream — amber */
+  --accent-pool: #4ec5ff; /* pool — cyan */
+  --accent-mm: #8aa0ff; /* market-maker — periwinkle (distinct from the pool cyan) */
+  --accent-dark: #9a8fc4; /* the dark agent — a MUTED, draining slate-violet (going silent, not neon) */
+  --accent-nano: #fb5bcf; /* the headline x402 Gateway nanopayment — magenta, hue clear of the rose */
+  --danger: #ff4d6a;
+  --warn: #ffb14a;
+
+  /* ── Surface tints — DEFINED colors, not raw rgba() sprinkled at call sites (alpha is a design smell
+     and produces muddy, unpredictable washes). Each is the signal color composited onto --bg-panel at a
+     fixed, legible weight, so colored text reads cleanly on top. ─────────────────────────────────── */
+  --tint-long: #11261d; /* long fill (OI bar, positive rows) */
+  --tint-short: #2a151c; /* short fill */
+  --tint-funding: #221a10; /* funding / hero-card wash */
+  --tint-pool: #0e202c; /* pool wash */
+  --tint-nano: #261325; /* nanopayment wash */
+  --row-alt: #0e131a; /* zebra row — a real surface, not a 1.2%-white ghost */
 }
 
 * {
@@ -165,7 +187,7 @@ body {
 /* A value that just changed flashes briefly. */
 @keyframes flash {
   0% {
-    background-color: rgba(56, 249, 176, 0.22);
+    background-color: color-mix(in srgb, var(--signal) 22%, transparent);
   }
   100% {
     background-color: transparent;

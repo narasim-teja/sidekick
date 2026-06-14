@@ -12,17 +12,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthorizationKind, SettlementEvent } from "@/lib/types.ts";
 import type { HeroNode } from "./PacketHero.tsx";
 
+// Mirror the refined CSS signal tokens (globals.css) — kept in sync with PacketHero's maps.
 const KIND_COLOR: Record<AuthorizationKind, string> = {
-  funding: "#ffb454",
-  "auto-settle": "#57c7ff",
-  "margin-call": "#ff52d9",
+  funding: "#ffb14a",
+  "auto-settle": "#4ec5ff",
+  "margin-call": "#fb5bcf",
 };
 const ROLE_COLOR: Record<string, string> = {
-  long: "#38f9b0",
-  short: "#ff5c7a",
-  mm: "#57c7ff",
-  funding: "#ffb454",
-  dark: "#b388ff",
+  long: "#62e6a0",
+  short: "#ff5d79",
+  mm: "#8aa0ff",
+  funding: "#ffb14a",
+  dark: "#9a8fc4",
   unknown: "#9fb0c0",
 };
 
@@ -128,8 +129,8 @@ export function NetworkFallback2D({
         />
       ))}
       {/* pool */}
-      <circle cx={CX} cy={CY} r="26" fill="#0c1016" stroke="#57c7ff" strokeWidth="1.5" />
-      <circle cx={CX} cy={CY} r="14" fill="#57c7ff" opacity="0.85">
+      <circle cx={CX} cy={CY} r="26" fill="#0c1016" stroke="#4ec5ff" strokeWidth="1.5" />
+      <circle cx={CX} cy={CY} r="14" fill="#4ec5ff" opacity="0.85">
         <animate attributeName="r" values="13;16;13" dur="2.4s" repeatCount="indefinite" />
       </circle>
       <text

@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+/*
+ * SideKick — observability dashboard visual identity.
+ *
+ * Direction: "mission control for a machine venue." A near-black instrument panel, phosphor-green and
+ * signal-amber readouts, hairline grid rules, monospace data, a faint scanline/grain atmosphere. It
+ * should read as a console built for autonomous agents to watch other agents — on-thesis, not generic.
+ *
+ * Type: Chakra Petch (squared, technical display) for headings; IBM Plex Mono for all data/readouts.
+ * Color is committed and asymmetric: one dominant (deep graphite), phosphor-green as the live signal,
+ * amber as caution/funding, magenta as the headline nanopayment, cyan for the pool. No purple-on-white.
+ */
+
+@theme {
+  --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+:root {
+  /* Surfaces — a graphite-to-black instrument panel. */
+  --bg: #07090c;
+  --bg-panel: #0c1016;
+  --bg-panel-2: #11161e;
+  --bg-raised: #161d27;
+  --line: #1c2430;
+  --line-bright: #2b3645;
+
+  /* Foreground. */
+  --fg: #e6edf3;
+  --fg-mid: #9fb0c0;
+  --fg-dim: #5d6b7a;
+
+  /* Signal palette — committed and distinctive. */
+  --signal: #38f9b0; /* phosphor green — "live", healthy, the heartbeat */
+  --signal-dim: #1c7a5a;
+  --accent-long: #38f9b0; /* longs / receive-side green */
+  --accent-short: #ff5c7a; /* shorts / pay-side rose */
+  --accent-funding: #ffb454; /* funding stream — amber */
+  --accent-mm: #57c7ff; /* market-maker — sky */
+  --accent-dark: #b388ff; /* the dark agent — violet (the one accent earned, not slop) */
+  --accent-pool: #57c7ff; /* pool — cyan */
+  --accent-nano: #ff52d9; /* the headline x402 Gateway nanopayment — magenta */
+  --danger: #ff5c7a;
+  --warn: #ffb454;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* Atmospheric base: a dual radial glow + the hairline grid + a faint vignette. */
+  background-image:
+    radial-gradient(900px 600px at 78% -10%, rgba(56, 249, 176, 0.06), transparent 60%),
+    radial-gradient(700px 500px at 10% 110%, rgba(87, 199, 255, 0.05), transparent 60%),
+    linear-gradient(var(--bg), var(--bg));
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* A faint grid texture overlay for the instrument-panel feel (very subtle, behind content). */
+.grid-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.22;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, black 30%, transparent 80%);
+}
+
+/* Headings use the squared display face. */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* Hairline panels — the core surface primitive. */
+.panel {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 40%), var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.panel-raised {
+  background: var(--bg-panel-2);
+  border: 1px solid var(--line-bright);
+}
+
+/* The corner ticks that make a card look like an instrument readout. */
+.ticked::before,
+.ticked::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-color: var(--line-bright);
+}
+.ticked::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.ticked::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+
+/* Label / eyebrow text. */
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* Tabular numerals everywhere data lives — readouts shouldn't jitter on update. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* The live pulse dot. */
+.pulse {
+  position: relative;
+}
+.pulse::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: pulse 1.8s ease-out infinite;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* A value that just changed flashes briefly. */
+@keyframes flash {
+  0% {
+    background-color: rgba(56, 249, 176, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.flash {
+  animation: flash 0.7s ease-out;
+}
+
+/* A new settlement row slides in from the top of the stream. */
+@keyframes streamin {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.streamin {
+  animation: streamin 0.35s ease-out;
+}
+
+/* Staggered page-load reveal. */
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  opacity: 0;
+  animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+/* Scanline overlay for the hero — faint, animated, CRT-instrument feel. */
+@keyframes scan {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 100vh;
+  }
+}
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  animation: scan 8s linear infinite;
+  opacity: 0.4;
+}
+
+/* Thin scrollbars in panels. */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--line-bright);
+  border-radius: 3px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Reduced motion respect. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse::after,
+  .scanlines::after,
+  .flash,
+  .streamin,
+  .rise {
+    animation: none;
+  }
+  .rise {
+    opacity: 1;
+  }
+}

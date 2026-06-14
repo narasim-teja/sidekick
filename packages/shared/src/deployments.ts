@@ -91,7 +91,12 @@ export const ARC_TESTNET_DEPLOYMENT: VenueDeployment = {
     "LINK-PERP": {
       pool: "0x81a445bf640e549E4b8aC00f19C76dB5de43A8E8" as Address,
       lpToken: "0xeD20A0fE33DB62Aac8313a806d594586bf31a68c" as Address,
-      oracleAdapter: "0x1091b1718609c040EbB01571b90aE0d67417bB34" as Address,
+      // Repointed to MarkReceiver — the Chainlink CRE consumer. The CRE workflow's DON→KeystoneForwarder
+      // calls MarkReceiver.onReport on Arc (the qualifying on-chain Chainlink state change); the engine
+      // then reads it via getMark (chainlink-live). Prior adapters: StorkAdapter
+      // 0x1091b1718609c040EbB01571b90aE0d67417bB34, relay ChainlinkAdapter 0xac8d01e357aa87dca276bed1435b161cbda0ef10,
+      // single-forwarder MarkReceiver 0x1f221318bb193473b3a4f8dcbaa9fc2a71c2b45f.
+      oracleAdapter: "0xb9f26b08c50aefe367308d89f7a2dacf2aec5d37" as Address,
     },
   },
 };

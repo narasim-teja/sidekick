@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {SignedWad} from "./lib/SignedWad.sol";
 import {Funding} from "./lib/Funding.sol";
 import {Decrement} from "./lib/Decrement.sol";
@@ -47,6 +48,7 @@ contract PerpEngine is Ownable, ReentrancyGuard {
     using SignedWad for int256;
     using Funding for *;
     using Decrement for *;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @notice 6dp-USDC ↔ 18dp-WAD scale (1e12) and 1e30 = 1e18 · 1e12 for notional→qty.
     uint256 internal constant USDC_TO_WAD = 1e12;
@@ -61,6 +63,10 @@ contract PerpEngine is Ownable, ReentrancyGuard {
 
     /// @notice marketId → account → position.
     mapping(bytes32 => mapping(address => Position)) private _positions;
+    /// @notice marketId → the set of accounts with a LIVE (non-flat) position. Maintained on
+    ///         open/close/gap so the CRE settlement workflow (Phase 6) can read the checkpoint
+    ///         account set on-chain ({openAccounts}) — fully decentralized, no off-chain list to trust.
+    mapping(bytes32 => EnumerableSet.AddressSet) private _openAccounts;
     /// @notice marketId → carried EMA state S_smooth (WAD), threaded across checkpoints.
     mapping(bytes32 => int256) public smoothSkewPrev;
     /// @notice marketId → last checkpoint index (monotonic; the Layer-C cadence counter).
@@ -143,6 +149,7 @@ contract PerpEngine is Ownable, ReentrancyGuard {
         p.entryNotional = notional;
         p.entryMark = mark;
         p.margin = margin;
+        _openAccounts[marketId].add(msg.sender); // track for the on-chain checkpoint account set
 
         pool.absorb(traderQtyWad, mark);
         emit PositionOpened(marketId, msg.sender, side, notional, margin, mark);
@@ -306,6 +313,7 @@ contract PerpEngine is Ownable, ReentrancyGuard {
             pool.absorb(-_signedQtyWad(p), mark); // unwind pool exposure
             if (shortfall > 0) emit GapShortfall(marketId, acct, shortfall);
             _positions[marketId][acct] = _flat();
+            _openAccounts[marketId].remove(acct); // position is flat — drop from the open set
             emit PositionReconciled(marketId, acct, equity, funding, call, paid, Decrement.Kind.Gap, notionalBefore, 0);
         }
     }
@@ -355,6 +363,7 @@ contract PerpEngine is Ownable, ReentrancyGuard {
         if (ret > 0) vault.creditCollateral(account, ret);
 
         _positions[marketId][account] = _flat();
+        _openAccounts[marketId].remove(account); // position is flat — drop from the open set
         emit PositionClosed(marketId, account, realized, mark);
     }
 
@@ -451,5 +460,17 @@ contract PerpEngine is Ownable, ReentrancyGuard {
     /// @notice Current notional of an account's position at `mark`, USDC 6dp.
     function notionalOf(bytes32 marketId, address account, uint256 mark) external view returns (uint256) {
         return _notionalAt(_positions[marketId][account], mark);
+    }
+
+    /// @notice The set of accounts with a live position in `marketId` — the checkpoint account set,
+    ///         readable on-chain so the CRE settlement workflow computes it from chain state (no
+    ///         off-chain list to trust). Order is not guaranteed; the set is small (per-market OI cap).
+    function openAccounts(bytes32 marketId) external view returns (address[] memory) {
+        return _openAccounts[marketId].values();
+    }
+
+    /// @notice Number of accounts with a live position in `marketId` (for paginating large sets).
+    function openAccountCount(bytes32 marketId) external view returns (uint256) {
+        return _openAccounts[marketId].length();
     }
 }

@@ -20,6 +20,7 @@ import {
   getMarket,
   type MarketSymbol,
   marketId as marketIdOf,
+  resolveOracle,
 } from "@sidekick/shared";
 import { Hono } from "hono";
 import type { Address, PublicClient } from "viem";
@@ -36,7 +37,7 @@ import { Venue } from "./chain/venue.ts";
 import type { Cadence } from "./compute/reconcile.ts";
 import { BLOCK_SECONDS_BIG, ENGINE_VERSION, FUNDING_PERIOD_BIG } from "./config.ts";
 import { type LoopDeps, type MarketRuntime, makeMarketRuntime, runMarketTick } from "./loop.ts";
-import { makeOracle } from "./oracle/index.ts";
+import { assertAdapterSource, makeOracle } from "./oracle/index.ts";
 import { PaymentLedger } from "./payments/ledger.ts";
 import { paymentRoutes } from "./payments/routes.ts";
 import { GatewaySeller } from "./payments/seller.ts";
@@ -76,6 +77,7 @@ export class EngineService {
   private readonly checkpointEveryBlocks: number;
   private readonly markets: MarketSymbol[];
   private readonly operator: Address;
+  private readonly env: Record<string, string | undefined>;
   private unwatch?: () => void;
   private running = false;
   private busy = false;
@@ -83,6 +85,7 @@ export class EngineService {
 
   constructor(config: EngineConfig = {}) {
     const env = config.env ?? process.env;
+    this.env = env;
     this.markets = config.markets ?? ["BTC-PERP"];
     this.checkpointEveryBlocks = config.checkpointEveryBlocks ?? 1;
     this.pub = publicClient(env);
@@ -102,7 +105,7 @@ export class EngineService {
 
     for (const symbol of this.markets) {
       const market = this.venue.market(symbol);
-      const oracle = makeOracle(this.pub, getMarket(symbol), market.oracleAdapter);
+      const oracle = makeOracle(this.pub, getMarket(symbol), market.oracleAdapter, env);
       this.runtimes.set(symbol, makeMarketRuntime(symbol, oracle));
     }
 
@@ -115,6 +118,9 @@ export class EngineService {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    // Guard: the on-chain adapter must actually report the source we resolved off-chain, so a
+    // `chainlink` resolution can never be read off a StorkAdapter and mislabeled `chainlink-live`.
+    await this.assertAdapterSources();
     await this.tracker.backfill();
     this.log(
       `backfill complete; looping ${this.markets.join(", ")} (checkpoint every ${this.checkpointEveryBlocks} block(s))`,
@@ -162,6 +168,22 @@ export class EngineService {
       this.pendingBlock = null;
       if (next !== null && this.running) void this.drain(next);
     }
+  }
+
+  /**
+   * Cross-check that each market's deployed adapter reports the source we resolved from env. Runs
+   * once at boot (the `source()` call is a free `pure` view). A mismatch means the on-chain
+   * `ORACLE_SOURCE_<MARKET>` (deploy) and the engine's resolution disagree — fail loudly rather than
+   * read a Stork feed while claiming Chainlink provenance.
+   */
+  private async assertAdapterSources(): Promise<void> {
+    await Promise.all(
+      this.markets.map((symbol) => {
+        const market = this.venue.market(symbol);
+        const expected = resolveOracle(symbol, this.env).source;
+        return assertAdapterSource(this.pub, market.oracleAdapter, expected);
+      }),
+    );
   }
 
   /** Reconcile every market at the given Arc block. */
@@ -246,6 +268,9 @@ export class EngineService {
       const cfg = getMarket(symbol);
       const md = dep.markets[symbol];
       const s = this.latest.get(symbol);
+      // Resolve the oracle from env (not the static MARKETS literal) so /venue reflects the live
+      // boot-time source choice (`ORACLE_SOURCE_<MARKET>`), matching what the loop actually reads.
+      const resolved = resolveOracle(symbol, this.env);
       return {
         symbol,
         name: cfg.name,
@@ -259,8 +284,8 @@ export class EngineService {
           k: cfg.params.k,
         },
         oracle: {
-          source: cfg.oracle.source,
-          assetId: cfg.oracle.source === "stork" ? cfg.oracle.assetId : cfg.oracle.feedId,
+          source: resolved.source,
+          assetId: resolved.source === "stork" ? resolved.assetId : resolved.feedId,
         },
         contracts: {
           pool: md?.pool ?? "",

@@ -1,0 +1,13 @@
+{
+  "schedule": "*/30 * * * * *",
+  "streamsHost": "api.testnet-dataengine.chain.link",
+  "feedId": "0x00036fe43f87884450b4c7e093cd5ed99cac6640d8c2000e6afc02c8838d0265",
+  "owner": "0xB6EBC5BED5A3B3Fbb1313f03121397e0Df220A62",
+  "evms": [
+    {
+      "markReceiverAddress": "0x559074a39b5A10B1492D2423b069b692ad2C9c64",
+      "chainSelectorName": "arc-testnet",
+      "gasLimit": "1000000"
+    }
+  ]
+}

@@ -46,3 +46,7 @@ sim-out/
 !.vscode/extensions.json
 !.vscode/settings.json
 *.swp
+
+# CRE workflow build artifacts (cre compile → WASM)
+packages/cre/**/.cre_build_tmp.js
+packages/cre/**/*.wasm

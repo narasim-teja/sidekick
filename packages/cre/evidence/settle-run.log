@@ -1,0 +1,30 @@
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite report=50kb gas=10000000 | WASM binary=100mb compressed=20mb
+  Binary hash: 063fac7888e7f54e1def7d0cd28344581b121e4725d3f75c542eaef2c363e840
+  Config hash: 26e517dfb1982346b4d292b1beb8a02d7e94ca9146bbafd3a3d05c7ad9ff2e73
+! Secret "CHAINLINK_API_KEY" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_CHAINLINK_API_KEY").
+! Secret "CHAINLINK_API_SECRET" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_CHAINLINK_API_SECRET").
+2026-06-13T20:50:51Z [SIMULATION] Simulator Initialized
+
+2026-06-13T20:50:51Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+
+2026-06-13T20:51:00Z [USER LOG] settling 0x4c494e4b2d504552500000000000000000000000000000000000000000000000 at mark 7965670000000000000 over 1 account(s)
+2026-06-13T20:51:01Z [USER LOG] ✓ CRE-driven checkpoint written on-chain: 0x524fc6c97ff1529c5962e2346426b4f46bb8007d063523c061fdbcfe8e0bf61c
+
+✓ Workflow Simulation Result:
+"0x524fc6c97ff1529c5962e2346426b4f46bb8007d063523c061fdbcfe8e0bf61c"
+
+2026-06-13T20:51:01Z [SIMULATION] Execution finished signal received
+2026-06-13T20:51:01Z [SIMULATION] Skipping WorkflowEngineV2
+2026-06-13T20:51:01Z [SIMULATION] Failed to cleanup beholder error=BeholderClient has not been started: cannot stop unstarted service
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

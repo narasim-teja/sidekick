@@ -55,15 +55,16 @@ if (hasFlag("new-key")) {
   process.exit(0);
 }
 
-/** Pick the market to trade from the venue descriptor: prefer a live (non-synthetic) Stork mark. */
+/** Pick the market to trade from the venue descriptor: prefer a live oracle mark (Stork or Chainlink). */
 function pickMarket(markets: VenueMarketDescriptor[], prefer?: string): VenueMarketDescriptor {
   if (prefer) {
     const m = markets.find((x) => x.symbol === prefer);
     if (!m) throw new Error(`market ${prefer} is not live on this venue`);
     return m;
   }
-  // Prefer a market whose mark is a real on-chain oracle value over a synthetic fallback.
-  const live = markets.find((m) => m.live?.markProvenance === "stork-live");
+  // Prefer a market whose mark is a real on-chain oracle value (stork-live OR chainlink-live) over a
+  // synthetic fallback. Matching `-live` keeps this source-agnostic as more sources are added.
+  const live = markets.find((m) => m.live?.markProvenance?.endsWith("-live"));
   return live ?? markets[0]!;
 }
 

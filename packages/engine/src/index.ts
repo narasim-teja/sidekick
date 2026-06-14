@@ -20,8 +20,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { MarketSymbol } from "@sidekick/shared";
-import { MARKET_SYMBOLS } from "@sidekick/shared";
+import { resolveMarketSet } from "@sidekick/shared";
 import { ENGINE_VERSION } from "./config.ts";
 import { type EngineConfig, EngineService } from "./service.ts";
 
@@ -31,18 +30,6 @@ export * as fixed from "./fixed/index.ts";
 export type { EngineConfig } from "./service.ts";
 export { EngineService } from "./service.ts";
 export * from "./state.ts";
-
-/** Read which markets to run from env (`ENGINE_MARKETS=BTC-PERP,ETH-PERP`), defaulting to BTC. */
-function marketsFromEnv(env: Record<string, string | undefined>): MarketSymbol[] {
-  const raw = env.ENGINE_MARKETS;
-  if (!raw) return ["BTC-PERP"];
-  if (raw === "all") return [...MARKET_SYMBOLS];
-  const parsed = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s): s is MarketSymbol => (MARKET_SYMBOLS as string[]).includes(s));
-  return parsed.length > 0 ? parsed : ["BTC-PERP"];
-}
 
 /**
  * Load the repo-root `.env` into process.env without overwriting existing values. Bun auto-loads
@@ -72,7 +59,7 @@ async function main(): Promise<void> {
   loadRootEnv();
   const env = process.env;
   const config: EngineConfig = {
-    markets: marketsFromEnv(env),
+    markets: resolveMarketSet(env),
     checkpointEveryBlocks: Number(env.CHECKPOINT_EVERY_BLOCKS ?? "1"),
     env,
   };

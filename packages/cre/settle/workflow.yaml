@@ -1,0 +1,8 @@
+# SideKick CRE settlement workflow settings. Paths are relative to this workflow folder.
+arc:
+  user-workflow:
+    workflow-name: "sidekick-settle"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: "../secrets.yaml"

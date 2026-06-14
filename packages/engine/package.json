@@ -16,7 +16,8 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "live:tick": "bun run src/scripts/live-tick.ts",
-    "live:open": "bun run src/scripts/live-open.ts"
+    "live:open": "bun run src/scripts/live-open.ts",
+    "chainlink:probe": "bun run src/scripts/chainlink-probe.ts"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "3.0.4",

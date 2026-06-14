@@ -72,3 +72,51 @@ export interface OracleAdapter {
 export function storkAssetId(symbol: string): Hex {
   return keccak256(toHex(symbol));
 }
+
+/**
+ * The env-var suffix for a market symbol: uppercase + dash stripped (e.g. `"BTC-PERP" → "BTCPERP"`).
+ *
+ * This is the off-chain mirror of the deploy script's `_stripDash` (Deploy.s.sol) — the two layers
+ * MUST agree byte-for-byte or the on-chain adapter and the engine's reader resolve different env keys
+ * for the same market. Dashes are not valid env-var characters, so they are removed (NOT replaced with
+ * `_`). Used to build `ORACLE_SOURCE_<suffix>` and `CHAINLINK_FEED_<suffix>`.
+ */
+export function oracleEnvKeySuffix(symbol: string): string {
+  return symbol.toUpperCase().replace(/-/g, "");
+}
+
+/**
+ * Resolve a Chainlink Data Streams feed id for a market from the environment.
+ *
+ * Unlike {@link storkAssetId}, a Chainlink feed id is NOT derivable from the symbol — it is a fixed
+ * 32-byte Data Streams registry id (e.g. `0x0003…` for a v3 crypto stream), supplied per-market via
+ * `CHAINLINK_FEED_<suffix>` (keyed by market symbol, dash-stripped — matching the deploy script's
+ * `_feedEnvKey`). Throws if a market resolves to Chainlink but no feed id is configured, so a
+ * misconfiguration fails loudly at boot rather than reading a zero feed id on-chain.
+ */
+export function chainlinkFeedId(
+  symbol: string,
+  env: Record<string, string | undefined> = process.env,
+): Hex {
+  const key = `CHAINLINK_FEED_${oracleEnvKeySuffix(symbol)}`;
+  const raw = unquote(env[key]);
+  if (!raw) {
+    throw new Error(
+      `${key} is required for the Chainlink-sourced market ${symbol} (a fixed 32-byte Data Streams feed id)`,
+    );
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(raw)) {
+    throw new Error(`${key}="${raw}" is not a 32-byte hex feed id (expected 0x + 64 hex chars)`);
+  }
+  return raw as Hex;
+}
+
+/** Trim and strip one surrounding pair of quotes from an env value (the engine .env loader keeps them). */
+function unquote(v: string | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  const t = v.trim();
+  if (t.length >= 2 && ((t[0] === '"' && t.at(-1) === '"') || (t[0] === "'" && t.at(-1) === "'"))) {
+    return t.slice(1, -1);
+  }
+  return t;
+}

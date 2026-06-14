@@ -7,5 +7,6 @@
 export * from "./chain.ts";
 export * from "./constants.ts";
 export * from "./deployments.ts";
+export * from "./market-config.ts";
 export * from "./markets.ts";
 export * from "./oracle.ts";

@@ -7,13 +7,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./markets": "./src/markets.ts",
+    "./market-config": "./src/market-config.ts",
     "./constants": "./src/constants.ts",
     "./oracle": "./src/oracle.ts",
     "./chain": "./src/chain.ts",
     "./deployments": "./src/deployments.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src"
   },
   "peerDependencies": {
     "viem": "^2.52.0"

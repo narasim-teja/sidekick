@@ -1,0 +1,11 @@
+# SideKick CRE project settings. The `arc` target points the EVM write/read capability at Arc testnet
+# (chain name `arc-testnet`, the same the Forwarder Directory uses). The KeystoneForwarder on Arc
+# delivers the workflow's report to MarkReceiver.onReport — the qualifying on-chain Chainlink write.
+arc:
+  cre-cli:
+    don-family: "zone-a"
+  account:
+    workflow-owner-address: "0xB6EBC5BED5A3B3Fbb1313f03121397e0Df220A62"
+  rpcs:
+    - chain-name: arc-testnet
+      url: https://rpc.testnet.arc.network

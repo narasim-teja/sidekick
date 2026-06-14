@@ -1,0 +1,8 @@
+# SideKick CRE workflow settings (mark-feed). Paths are relative to this workflow folder.
+arc:
+  user-workflow:
+    workflow-name: "sidekick-markfeed"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: "../secrets.yaml"

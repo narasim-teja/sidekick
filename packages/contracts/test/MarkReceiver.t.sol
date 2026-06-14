@@ -75,6 +75,31 @@ contract MarkReceiverTest is Test {
         receiver.getMark();
     }
 
+    /// Regression: a mark whose DON observation timestamp LEADS the block clock (normal — the Data
+    /// Streams observation clock runs a few seconds ahead of an L2/L3 finalized block) must read as
+    /// FRESH, not underflow-revert. Before the guard, `block.timestamp*1000 - timestampMs` panicked
+    /// (0x11) and hard-reverted the whole CRE read/settle path.
+    function test_getMark_futureObservationIsFresh() public {
+        vm.warp(1_000_000); // realistic block clock so a "future" mark can lead it
+        uint64 nowMs = uint64(block.timestamp) * 1000;
+        uint64 futureMs = nowMs + 2000; // observed 2s ahead of the block clock
+        vm.prank(forwarder);
+        receiver.onReport("", _report(8e18, futureMs));
+
+        IOracleAdapter.Mark memory m = receiver.getMark(); // must NOT revert
+        assertEq(m.price18, 8e18);
+        assertEq(m.timestampMs, futureMs);
+    }
+
+    /// Boundary: a mark observed exactly at the block clock is fresh (the >= branch).
+    function test_getMark_atNowIsFresh() public {
+        vm.warp(1_000_000);
+        uint64 nowMs = uint64(block.timestamp) * 1000;
+        vm.prank(forwarder);
+        receiver.onReport("", _report(7e18, nowMs));
+        assertEq(receiver.getMark().price18, 7e18);
+    }
+
     function test_supportsInterface() public view {
         assertTrue(receiver.supportsInterface(type(IReceiver).interfaceId));
         assertTrue(receiver.supportsInterface(type(IOracleAdapter).interfaceId));

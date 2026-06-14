@@ -3,9 +3,9 @@
   "marketId": "0x4c494e4b2d504552500000000000000000000000000000000000000000000000",
   "evms": [
     {
-      "perpEngineAddress": "0xb07C345cCce65AC168eD47f91bf75F3311Db93a6",
-      "markReceiverAddress": "0x130006A6E9CF11115F5f0b7c47100Dd767DfC44C",
-      "settlerAddress": "0x482CAdEbEf6Bc6812bf41Da43C0732C8c1Ab64ec",
+      "perpEngineAddress": "0x6d4A9355585Df1c9919D09c1842f09d1231Fe848",
+      "markReceiverAddress": "0x559074a39b5A10B1492D2423b069b692ad2C9c64",
+      "settlerAddress": "0xad5797964eBACecC1Ef49FF4Cf6E4B89F9c38690",
       "chainSelectorName": "arc-testnet",
       "gasLimit": "2000000"
     }

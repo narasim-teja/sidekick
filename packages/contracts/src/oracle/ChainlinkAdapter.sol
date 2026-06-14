@@ -81,11 +81,16 @@ contract ChainlinkAdapter is IOracleAdapter, Ownable {
     /// @dev Reverts {StaleMark} if the stored mark is older than maxStalenessSeconds. The off-chain
     ///      ResilientOracle treats a revert here exactly as it treats Stork's NotFound — it latches
     ///      to the synthetic fallback and re-probes, so a stale Chainlink feed degrades gracefully.
+    ///      A mark whose observation timestamp is at/ahead of the current block clock is treated as
+    ///      fresh (NOT stale) — Data Streams' observation clock can lead an L2/L3 block clock, and an
+    ///      unguarded `block.timestamp*1000 - timestampMs` would underflow (panic 0x11) and hard-revert
+    ///      every read instead of returning the fresh mark.
     function getMark() external view returns (Mark memory mark) {
         Mark memory m = _mark;
         if (m.timestampMs == 0) revert StaleMark(); // never pushed
-        uint64 ageMs = uint64(block.timestamp) * 1000 - m.timestampMs;
-        if (ageMs > maxStalenessSeconds * 1000) revert StaleMark();
+        uint64 nowMs = uint64(block.timestamp) * 1000;
+        if (m.timestampMs >= nowMs) return m; // future/at-now observation: fresh, no underflow
+        if (nowMs - m.timestampMs > maxStalenessSeconds * 1000) revert StaleMark();
         return m;
     }
 

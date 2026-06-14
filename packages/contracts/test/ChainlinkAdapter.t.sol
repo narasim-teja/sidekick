@@ -84,6 +84,17 @@ contract ChainlinkAdapterTest is Test {
         adapter.getMark();
     }
 
+    /// Regression: a mark whose observation timestamp LEADS the block clock (Data Streams' clock can
+    /// run ahead of an L2/L3 finalized block) must read as FRESH, not underflow-revert. Before the
+    /// guard, `block.timestamp*1000 - timestampMs` panicked (0x11) on a future-dated mark.
+    function test_getMark_futureObservationIsFresh() public {
+        uint64 futureMs = uint64(block.timestamp) * 1000 + 2000; // observed 2s ahead
+        adapter.pushMarkUnverified(8e18, futureMs);
+        IOracleAdapter.Mark memory m = adapter.getMark(); // must NOT revert
+        assertEq(m.price18, 8e18);
+        assertEq(m.timestampMs, futureMs);
+    }
+
     function test_onlyWriter_canPush() public {
         verifier.setNext(_report(1e18, uint32(block.timestamp)));
         vm.prank(address(0xBEEF));

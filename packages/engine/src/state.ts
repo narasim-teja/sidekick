@@ -160,6 +160,18 @@ export interface VenueDescriptor {
     perpEngine: string;
     accountManager: string;
   };
+  /**
+   * The ERC-8004 ("Trustless Agents") registries SideKick agents are identified + scored on (Doc 1
+   * §8). An external system resolves a SideKick agent's identity/reputation via these canonical
+   * on-chain registries: `register()` on `identity` mints an agentId; `giveFeedback()` on
+   * `reputation` records on-chain feedback. The namespaced id convention is
+   * `eip155:<chainId>:<identity>/<agentId>`.
+   */
+  erc8004: {
+    identity: string;
+    reputation: string;
+    namespace: string;
+  };
   /** Cadence: Arc block time + how often a checkpoint lands on-chain + the funding reference period. */
   cadence: { blockSeconds: number; checkpointEveryBlocks: number; fundingPeriodSeconds: number };
   /** Units convention so a consumer never guesses decimals. */

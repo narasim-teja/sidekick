@@ -16,6 +16,7 @@
 
 import {
   BLOCK_SECONDS,
+  erc8004For,
   FUNDING_PERIOD_SECONDS,
   getMarket,
   type MarketSymbol,
@@ -318,6 +319,14 @@ export class EngineService {
         perpEngine: dep.perpEngine,
         accountManager: dep.accountManager,
       },
+      erc8004: (() => {
+        const r = erc8004For(dep.chainId);
+        return {
+          identity: r.identity,
+          reputation: r.reputation,
+          namespace: `eip155:${dep.chainId}`,
+        };
+      })(),
       cadence: {
         blockSeconds: BLOCK_SECONDS,
         checkpointEveryBlocks: this.checkpointEveryBlocks,

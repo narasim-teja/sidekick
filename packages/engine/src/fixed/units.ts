@@ -73,9 +73,16 @@ export function formatWad(wad: bigint): string {
  * params equal the generated `Params.sol` constants exactly.
  */
 export function floatToWad(x: number): bigint {
-  // 12 sig-decimals is plenty for m/α/λ/r_max (the smallest is 0.0005) and clears float noise.
-  const scaled = Math.round(x * 1e12);
-  return (BigInt(scaled) * WAD) / 1_000_000_000_000n;
+  if (!Number.isFinite(x)) throw new Error(`floatToWad: non-finite input ${x}`);
+  // 12 sig-decimals is plenty for m/α/λ/r_max (the smallest is 0.0005) and clears float noise. But
+  // `Math.round(x * 1e12)` is only a safe integer for |x| < ~9007 (Number.MAX_SAFE_INTEGER / 1e12);
+  // a large mark (or a tail shock in the synthetic walk) overflows that and yields a float in
+  // scientific notation that `BigInt()` rejects ("Not an integer"). For big values, scale to WAD
+  // directly (we lose sub-integer precision only above 9007, which is irrelevant for a price).
+  if (Math.abs(x) < 9007) {
+    return (BigInt(Math.round(x * 1e12)) * WAD) / 1_000_000_000_000n;
+  }
+  return BigInt(Math.round(x)) * WAD;
 }
 
 /** Convert a float USDC amount to 6dp atomic bigint (rounded). For test/seed convenience. */

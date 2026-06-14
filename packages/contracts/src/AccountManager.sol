@@ -19,9 +19,13 @@ interface IPerpEnginePositions {
 ///         in the POC). It deliberately holds no money and runs no risk logic — the settlement loop
 ///         never branches on "is this an LP", so there is nothing account-type-specific to enforce
 ///         here; it is the unified *lens*, not a gatekeeper.
-/// @dev Identity linking is self-sovereign: an account links its own ERC-8004 token id. The id is
-///      stored for reputation/discovery surfaces; no on-chain verification of the registry is done
-///      in the POC (the ERC-8004 registry integration lands with the SDK onboarding, Phase 5).
+/// @dev Identity linking is self-sovereign: an account links its own ERC-8004 token id. This is the
+///      in-venue *mirror* of an identity that is minted on Arc's canonical ERC-8004 Identity Registry
+///      (the SDK's `registerAgent()` mints a real `agentId` there — `agentWallet` defaults to the
+///      caller — then calls `linkIdentity(agentId)` here). This contract stores the id for the
+///      unified-account view + discovery surfaces; the registry holds the authoritative NFT, owner,
+///      payee wallet, and reputation. We deliberately don't re-verify the registry on-chain here:
+///      the link is a convenience pointer, and a mismatched id only mislabels the caller's own view.
 contract AccountManager {
     /// @notice The collateral vault.
     Vault public immutable vault;

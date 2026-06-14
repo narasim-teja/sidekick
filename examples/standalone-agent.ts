@@ -16,13 +16,14 @@
  *   6. SETTLE    — each block, answer any open margin call as a gas-free Gateway x402 nanopayment.
  *                  Miss it and the venue decrements you smoothly — there is no liquidation cliff.
  *
- * Run:
- *   export AGENT_PRIVATE_KEY=0x...           # a funded Arc-testnet EOA (USDC is the gas token too)
+ * Signer (Circle-first): set a Circle developer-controlled wallet (MPC custody, no raw key) —
+ *   export CIRCLE_API_KEY=… CIRCLE_ENTITY_SECRET=… CIRCLE_WALLET_ID=…
+ * or a raw EOA — export AGENT_PRIVATE_KEY=0x… (USDC is the gas token too). Then:
  *   export ENGINE_URL=http://localhost:8787  # the SideKick engine (default; omit to use it)
  *   bun run examples/standalone-agent.ts --collateral 10 --leverage 5 --blocks 30
  *
- * Need a key + funds? `bun run examples/standalone-agent.ts --new-key` prints a fresh EOA to fund
- * from the Circle Arc-testnet USDC faucet, then re-run with that key.
+ * No raw key + want one? `--new-key` prints a fresh EOA to fund from the Circle Arc-testnet USDC
+ * faucet, then re-run with AGENT_PRIVATE_KEY set to it. (For a Circle wallet, see circle-wallet-agent.ts.)
  */
 
 import {
@@ -83,21 +84,40 @@ function desiredSide(state: MarketBlockState): "long" | "short" | null {
 }
 
 async function main(): Promise<void> {
-  const privateKey = process.env.AGENT_PRIVATE_KEY as `0x${string}` | undefined;
-  if (!privateKey) {
-    console.error(
-      "Set AGENT_PRIVATE_KEY to a funded Arc-testnet EOA (or run with --new-key to mint one).",
-    );
-    process.exit(1);
-  }
   const engineUrl = process.env.ENGINE_URL ?? "http://localhost:8787";
   const collateral = arg("collateral", "10"); // USDC posted as margin per open
   const leverage = Number(arg("leverage", "5"));
   const maxBlocks = Number(arg("blocks", "30")); // stop after this many blocks (then close out)
   const preferMarket = arg("market", "") || undefined;
 
-  const sk = new SideKick({ network: "arc-testnet", privateKey, engineUrl });
-  console.log(`agent ${sk.address}`);
+  // SIGNER (Circle-first): a Circle developer-controlled wallet (MPC custody, no raw key in this
+  // process) if CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID are set; else a raw
+  // AGENT_PRIVATE_KEY EOA. Both trade + answer margin calls identically — SideKick takes a signer.
+  const { CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_ID, AGENT_PRIVATE_KEY } = process.env;
+  let sk: SideKick;
+  if (CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET && CIRCLE_WALLET_ID) {
+    const { circleSigner } = await import("@sidekick/sdk/circle");
+    const { account, broadcaster } = await circleSigner({
+      apiKey: CIRCLE_API_KEY,
+      entitySecret: CIRCLE_ENTITY_SECRET,
+      walletId: CIRCLE_WALLET_ID,
+    });
+    sk = new SideKick({ network: "arc-testnet", account, broadcaster, engineUrl });
+    console.log(`agent ${sk.address} (Circle MPC wallet, no raw key)`);
+  } else if (AGENT_PRIVATE_KEY) {
+    sk = new SideKick({
+      network: "arc-testnet",
+      privateKey: AGENT_PRIVATE_KEY as `0x${string}`,
+      engineUrl,
+    });
+    console.log(`agent ${sk.address} (raw key)`);
+  } else {
+    console.error(
+      "Set a Circle wallet (CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET + CIRCLE_WALLET_ID) or " +
+        "AGENT_PRIVATE_KEY (a funded Arc-testnet EOA; or run with --new-key to mint one).",
+    );
+    process.exit(1);
+  }
 
   // 1) DISCOVER — learn the venue from one call (no imported constants, no hardcoded addresses).
   const venue = await sk.venue();

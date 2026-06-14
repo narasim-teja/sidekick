@@ -1,6 +1,6 @@
 /**
  * Display formatting. The engine sends amounts as decimal strings and rates/skew as numbers; these
- * helpers turn them into legible, consistently-rounded display strings. No bigint math here — the
+ * helpers turn them into legible, consistently-rounded display strings. No bigint math here, the
  * payload already crossed the 6dp/WAD boundary in the engine (Doc 1 §5), so this is pure presentation.
  */
 

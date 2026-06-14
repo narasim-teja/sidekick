@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * PacketHero — the thesis made visible in 3D.
+ * PacketHero: the thesis made visible in 3D.
  *
  * The venue is rendered as a settlement network: a central POOL node (the universal counterparty) ringed
  * by the live agent nodes. Every settlement event the engine emits this block becomes a literal PACKET
  * that flies between the agent and the pool, colored by kind:
- *   • funding      (amber)   — the continuous per-block funding stream
- *   • auto-settle  (cyan)    — the contract topping a position up from Vault collateral in `checkpoint`
- *   • margin-call  (magenta) — the HEADLINE x402 Gateway nanopayment (the sub-cent off-chain payment)
+ *   • funding      (amber)  , the continuous per-block funding stream
+ *   • auto-settle  (cyan)   , the contract topping a position up from Vault collateral in `checkpoint`
+ *   • margin-call  (magenta), the HEADLINE x402 Gateway nanopayment (the sub-cent off-chain payment)
  *
  * Direction encodes the cashflow sign: a packet flies agent→pool when the account pays, pool→agent when
  * it receives. So "thousands of sub-cent payments per block" stops being a sentence and becomes a swarm.
@@ -16,7 +16,7 @@
  * This is pure three.js (no react-three-fiber) so the bundle stays small and the render loop is fully
  * under our control. The component is feed-driven: `events` (this block's batch) spawn packets; `nodes`
  * (the live accounts + their roles) lay out the ring. All three.js objects are created once and disposed
- * on unmount — no per-frame allocation in the hot loop beyond the bounded packet pool.
+ * on unmount, no per-frame allocation in the hot loop beyond the bounded packet pool.
  */
 
 import { useEffect, useMemo, useRef } from "react";
@@ -29,7 +29,7 @@ export interface HeroNode {
   account: string;
   /** 0..1 size hint (notional share) for the node radius. */
   weight: number;
-  /** Role accent color (CSS var resolved to hex by the caller is unnecessary — we map below). */
+  /** Role accent color (CSS var resolved to hex by the caller is unnecessary, we map below). */
   role: string;
 }
 
@@ -44,9 +44,9 @@ const KIND_COLOR: Record<AuthorizationKind, number> = {
 const ROLE_COLOR: Record<string, number> = {
   long: 0x62e6a0,
   short: 0xff5d79,
-  mm: 0x8aa0ff, // periwinkle — distinct from the pool cyan
+  mm: 0x8aa0ff, // periwinkle, distinct from the pool cyan
   funding: 0xffb14a,
-  dark: 0x9a8fc4, // muted slate-violet — the agent going silent, not a neon glow
+  dark: 0x9a8fc4, // muted slate-violet, the agent going silent, not a neon glow
   unknown: 0x9fb0c0,
 };
 
@@ -261,7 +261,7 @@ export function PacketHero({
       const nodePos = nodeMap.get(e.account.toLowerCase());
       if (!nodePos) return;
       const slot = packets.find((p) => !p.active);
-      if (!slot) return; // pool saturated this frame — fine, we're showing density not exactness
+      if (!slot) return; // pool saturated this frame, fine, we're showing density not exactness
       const pays = Number(e.amount) < 0; // negative = account pays → agent→pool
       slot.from.copy(pays ? nodePos : POOL_POS);
       slot.to.copy(pays ? POOL_POS : nodePos);

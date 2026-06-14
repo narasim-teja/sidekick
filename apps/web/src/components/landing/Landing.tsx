@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * Landing — the marketing page at `/`. It is the brand surface: make the agent-native perp thesis
+ * Landing: the marketing page at `/`. It is the brand surface: make the agent-native perp thesis
  * land in 60 seconds and get a developer to install the SDK. Five movements, each a different visual
  * world but one continuous identity (the dashboard's instrument-panel language at brand scale):
  *
- *   1. HERO       — the self-running settlement-lattice (bespoke three.js) + the one-breath claim + CTAs.
- *   2. THESIS     — the three human-era assumptions SideKick deletes, stated as before → after.
- *   3. MECHANISM  — the per-block loop made legible: mark → fund → check → call → settle → decrement.
- *   4. SDK        — the developer on-ramp: the install console + a real, copyable agent lifecycle.
- *   5. STACK      — what it runs on (Arc / Circle / Chainlink) + the closing "enter the venue" CTA.
+ *   1. HERO      , the self-running settlement-lattice (bespoke three.js) + the one-breath claim + CTAs.
+ *   2. THESIS    , the three human-era assumptions SideKick deletes, stated as before → after.
+ *   3. MECHANISM , the per-block loop made legible: mark → fund → check → call → settle → decrement.
+ *   4. SDK       , the developer on-ramp: the install console + a real, copyable agent lifecycle.
+ *   5. STACK     , what it runs on (Arc / Circle / Chainlink) + the closing "enter the venue" CTA.
  *
  * The lattice hero is dynamically imported with SSR off (three.js needs the DOM); a static gradient
  * shows until it mounts and if WebGL is unavailable, so the headline always reads.
@@ -46,7 +46,7 @@ function Hero() {
   const [webglFailed, setWebglFailed] = useState(false);
   return (
     <section className="relative min-h-[100svh] flex items-center overflow-hidden">
-      {/* Static palette backdrop (also the pre-mount / no-WebGL fallback) — full-bleed, behind all. */}
+      {/* Static palette backdrop (also the pre-mount / no-WebGL fallback), full-bleed, behind all. */}
       <div
         className="absolute inset-0 z-0"
         style={{
@@ -59,7 +59,7 @@ function Hero() {
       <div className="absolute inset-0 z-0 lg:left-[42%]" style={{ opacity: 1 }}>
         {!webglFailed && <LatticeHero onUnsupported={() => setWebglFailed(true)} />}
       </div>
-      {/* readability scrim — heavy on the left, clears to the right where the lattice lives */}
+      {/* readability scrim, heavy on the left, clears to the right where the lattice lives */}
       <div
         className="absolute inset-0 z-[1] pointer-events-none"
         style={{
@@ -86,11 +86,11 @@ function Hero() {
             className="rise lede mt-6 text-[15px] sm:text-[17px]"
             style={{ animationDelay: "140ms" }}
           >
-            Human perp venues settle funding every 8 hours and force-close you at a penalty — because
+            Human perp venues settle funding every 8 hours and force-close you at a penalty, because
             humans are slow. SideKick assumes the opposite. Funding settles{" "}
             <span className="text-[var(--accent-funding)]">every block</span>. Margin reconciles{" "}
             <span className="text-[var(--accent-funding)]">every block</span>. Miss a call and your
-            position <span className="text-[var(--fg)]">decrements smoothly</span> — no liquidation,
+            position <span className="text-[var(--fg)]">decrements smoothly</span>, no liquidation,
             no penalty, no keeper. Settled through gas-free{" "}
             <span className="nano-glow">nanopayments</span> on Arc.
           </p>
@@ -154,16 +154,16 @@ const DELETED = [
   {
     n: "01",
     assumption: "Discrete funding, every 8 hours",
-    why: "You can't ask a human to reconcile a cashflow every few seconds — so venues batch it, and traders game the snapshot.",
+    why: "You can't ask a human to reconcile a cashflow every few seconds, so venues batch it, and traders game the snapshot.",
     instead: "Per-block continuous funding",
     detail:
-      "The rate recomputes each block from live book skew and settles as a stream. No snapshot to game. Holding one block costs exactly one block of funding — so funding becomes a clean tradeable signal an agent can hold in isolation.",
+      "The rate recomputes each block from live book skew and settles as a stream. No snapshot to game. Holding one block costs exactly one block of funding, so funding becomes a clean tradeable signal an agent can hold in isolation.",
     accent: "var(--accent-funding)",
   },
   {
     n: "02",
     assumption: "Threshold liquidation, with a penalty",
-    why: "A human can't answer a margin call in 200ms — so the venue force-closes the position at a penalty and pays a keeper to do it.",
+    why: "A human can't answer a margin call in 200ms, so the venue force-closes the position at a penalty and pays a keeper to do it.",
     instead: "Continuous reconciliation, no liquidation",
     detail:
       "Every block we mark, compute the shortfall, and request it as a tiny payment. Pay → healthy. Don't pay → the position decrements by exactly enough to be adequately margined at the current mark. No cliff, no penalty, no keeper network.",
@@ -175,7 +175,7 @@ const DELETED = [
     why: "A human's intent is static between decisions, so a passive store of frozen instructions is the right abstraction.",
     instead: "A pool counterparty + agent strategies",
     detail:
-      "Traders trade against an isolated USDC pool priced by convex skew-funding; agent market-makers layer on top to earn the rebate crowded-side traders pay. Intent is a function of world state, expressed in code — not a flicker of cancel/replace orders.",
+      "Traders trade against an isolated USDC pool priced by convex skew-funding; agent market-makers layer on top to earn the rebate crowded-side traders pay. Intent is a function of world state, expressed in code, not a flicker of cancel/replace orders.",
     accent: "var(--accent-mm)",
   },
 ];
@@ -188,7 +188,7 @@ function Thesis() {
         <SectionHead
           index="A"
           title="Three assumptions, deleted."
-          lede="Every human perp venue bakes in three workarounds for human slowness. An agent has none of those limits — so we removed all three. This isn't an SDK bolted on a human venue; it's a different engine and a different risk model."
+          lede="Every human perp venue bakes in three workarounds for human slowness. An agent has none of those limits, so we removed all three. This isn't an SDK bolted on a human venue; it's a different engine and a different risk model."
         />
 
         <div className="mt-14 flex flex-col">
@@ -242,7 +242,7 @@ function Thesis() {
 
 const LOOP = [
   { step: "mark", body: "Re-price every position at the new oracle mark.", accent: "var(--fg)" },
-  { step: "fund", body: "Apply this block's funding — convex in skew, smoothed against spikes.", accent: "var(--accent-funding)" },
+  { step: "fund", body: "Apply this block's funding, convex in skew, smoothed against spikes.", accent: "var(--accent-funding)" },
   { step: "check", body: "Is equity ≥ maintenance? Healthy → done.", accent: "var(--fg-mid)" },
   { step: "call", body: "Else request the shortfall as a margin-call nanopayment.", accent: "var(--accent-nano)" },
   { step: "settle", body: "Paid off-chain via x402 → margin restored.", accent: "var(--accent-pool)" },
@@ -265,7 +265,7 @@ function Mechanism() {
           <SectionHead
             index="B"
             title="One loop, every two seconds."
-            lede="No part of this is theoretical batching. Every Arc block (~2s) the engine runs one deterministic pass over every position. The order is load-bearing — mark, then fund, then check post-funding equity, then decrement on that equity. Watch it on the dashboard."
+            lede="No part of this is theoretical batching. Every Arc block (~2s) the engine runs one deterministic pass over every position. The order is load-bearing, mark, then fund, then check post-funding equity, then decrement on that equity. Watch it on the dashboard."
           />
 
           {/* the loop as a horizontal pipeline of stages connected by the flowing nano-line */}
@@ -298,12 +298,12 @@ function Mechanism() {
             </p>
           </div>
 
-          {/* the honest caveat — volunteered, per the docs */}
+          {/* the honest caveat, volunteered, per the docs */}
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-center border border-[var(--line-bright)] rounded p-6 bg-[var(--bg-panel)]">
             <p className="text-[13px] text-[var(--fg-mid)] leading-relaxed max-w-2xl">
               <span className="text-[var(--fg)] font-semibold">The honest edge.</span> Decrement
               handles <em>gradual</em> trouble. A single-block price gap that jumps a position from
-              solvent to underwater has no in-between to decrement through — so a small{" "}
+              solvent to underwater has no in-between to decrement through, so a small{" "}
               <span className="text-[var(--fg)]">gap fund</span> remains, sized only for gaps, an
               order of magnitude smaller than a normal insurance fund. We name our own weakness
               before you ask.
@@ -325,21 +325,21 @@ const LIFECYCLE = `import { SideKick } from "@sidekick/sdk";
 
 const sk = new SideKick({ privateKey, engineUrl });
 
-// 1 · DISCOVER — the venue self-configures the agent
+// 1 · DISCOVER, the venue self-configures the agent
 const venue = await sk.venue();
 
-// 2 · ONBOARD — collateral in the Vault + a Gateway balance
+// 2 · ONBOARD, collateral in the Vault + a Gateway balance
 await sk.onboard({ collateral: "100" });
 
-// 3 · OPEN — one position, levered against the pool
+// 3 · OPEN, one position, levered against the pool
 await sk.open({ market: "ETH-PERP", side: "long", leverage: 5 });
 
-// 4 · EACH BLOCK — answer the margin call, gas-free
+// 4 · EACH BLOCK, answer the margin call, gas-free
 sk.onBlock(async (state) => {
   if (await sk.owed("ETH-PERP")) {
     await sk.answerMarginCall("ETH-PERP"); // x402 nanopayment
   }
-  // ...miss it and the venue decrements you — no liquidation
+  // ...miss it and the venue decrements you, no liquidation
 });`;
 
 const SDK_DOES = [
@@ -357,7 +357,7 @@ function Sdk() {
         <SectionHead
           index="C"
           title="Agents have API calls, not eyes."
-          lede="There is no trading chart — the product surface is a TypeScript SDK and a per-block event stream. A stranger's agent discovers the venue, onboards, trades, and answers its own margin calls with no human in the loop. The SDK is the venue, from the consumer's point of view."
+          lede="There is no trading chart, the product surface is a TypeScript SDK and a per-block event stream. A stranger's agent discovers the venue, onboards, trades, and answers its own margin calls with no human in the loop. The SDK is the venue, from the consumer's point of view."
         />
 
         <div className="mt-14 grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-10 lg:gap-14 items-start">
@@ -409,7 +409,7 @@ function Sdk() {
 }
 
 /**
- * A deliberately tiny syntax tint — not a full tokenizer, just enough to lift comments, strings, and a
+ * A deliberately tiny syntax tint, not a full tokenizer, just enough to lift comments, strings, and a
  * few keywords so the snippet reads like an editor without pulling in a highlighting dependency. The
  * source string is trusted (a literal above), so splitting on lines and spans is safe.
  */
@@ -473,7 +473,7 @@ const STACK = [
   {
     name: "Circle Gateway",
     role: "gas-free nanopayments",
-    line: "x402 / EIP-3009 signed authorizations against a unified balance. Thousands of sub-cent payments per block — the primitive that makes per-block funding viable.",
+    line: "x402 / EIP-3009 signed authorizations against a unified balance. Thousands of sub-cent payments per block, the primitive that makes per-block funding viable.",
     accent: "var(--accent-nano)",
   },
   {
@@ -495,7 +495,7 @@ function Stack() {
         <SectionHead
           index="D"
           title="Built on the rails that just shipped."
-          lede="None of this was buildable until months ago. Per-block funding means thousands of sub-cent payments per block — economically impossible until batched nanopayments existed. We're on-time to a newly-buildable solution, not early to a problem."
+          lede="None of this was buildable until months ago. Per-block funding means thousands of sub-cent payments per block, economically impossible until batched nanopayments existed. We're on-time to a newly-buildable solution, not early to a problem."
         />
 
         <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--line)] border border-[var(--line)] rounded overflow-hidden">
@@ -535,7 +535,7 @@ function FooterCta() {
         </h2>
         <p className="lede mx-auto mt-5 text-[15px] sm:text-[16px]">
           Watch funding move, the settlement stream fire, and a position decrement instead of
-          liquidate — live, or as a deterministic replay of the venue math.
+          liquidate, live, or as a deterministic replay of the venue math.
         </p>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
           <a href="/dashboard" className="btn-key text-[0.95rem] px-6 py-3.5">
@@ -572,9 +572,9 @@ function FooterCta() {
 /* ── shared ──────────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * SectionHead — a deliberate, sparse section marker. A single lettered index (A/B/C/D) + a display
+ * SectionHead: a deliberate, sparse section marker. A single lettered index (A/B/C/D) + a display
  * title + a lede. The letters are a real sequence (the page's four movements), not a per-section
- * eyebrow trope — used once each, in order, as the page's spine.
+ * eyebrow trope, used once each, in order, as the page's spine.
  */
 function SectionHead({
   index,

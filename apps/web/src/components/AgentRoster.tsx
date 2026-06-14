@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * AgentRoster — the agent view (Doc 2 §7.1, panel 5): each demo agent's identity, strategy, and live
- * activity. This is where the thesis-proving archetypes are named — the funding-strategy "hero" and
+ * AgentRoster: the agent view (Doc 2 §7.1, panel 5): each demo agent's identity, strategy, and live
+ * activity. This is where the thesis-proving archetypes are named, the funding-strategy "hero" and
  * the "dark" agent especially. Identity maps from address → role via `NEXT_PUBLIC_AGENTS`
  * (ERC-8004 identity is the on-chain analog; here we surface the role + a live status line).
  */

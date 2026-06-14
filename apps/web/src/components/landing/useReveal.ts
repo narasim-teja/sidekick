@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * useReveal — a tiny scroll-reveal hook. Content is visible by default (CSS `.reveal` is a no-op); we
+ * useReveal: a tiny scroll-reveal hook. Content is visible by default (CSS `.reveal` is a no-op); we
  * only ARM the entrance (hide + offset) on the client AFTER mount, then play it when the element scrolls
  * into view via IntersectionObserver. So a headless render / disabled-JS / tab-throttled context never
- * ships blank — the reveal is pure enhancement over an already-visible default (per the skill's rule).
+ * ships blank, the reveal is pure enhancement over an already-visible default (per the skill's rule).
  *
  * Respects prefers-reduced-motion: when reduced, we never arm, so the content simply stays put.
  */

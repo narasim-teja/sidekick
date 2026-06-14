@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Header — the masthead + live status bar. Carries the venue identity, the LIVE / REPLAY mode badge
+ * Header: the masthead + live status bar. Carries the venue identity, the LIVE / REPLAY mode badge
  * (so the data provenance is always honest), the chain, the engine operator, the funding cadence, and
  * the latest on-chain checkpoint tx (linked to Arcscan). The per-block "heartbeat" dot pulses on each
  * new tick so the page visibly breathes with the loop.
@@ -27,7 +27,7 @@ function ModeBadge({ mode }: { mode: FeedMode }) {
       <span
         className="inline-flex items-center gap-2 px-2.5 py-1 rounded border"
         style={{ borderColor: "var(--warn)", color: "var(--warn)" }}
-        title="Engine offline — showing a deterministic demo replay of the venue math."
+        title="Engine offline, showing a deterministic demo replay of the venue math."
       >
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--warn)" }} />
         <span className="text-[11px] font-semibold tracking-widest">REPLAY</span>
@@ -110,10 +110,10 @@ export function Header({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[12px] text-[var(--fg-mid)] max-w-2xl leading-relaxed">
           The per-block loop, made visible. Continuous funding, no liquidations, and gas-free
-          nanopayment settlement on Arc — re-marked and reconciled every {blockSeconds} seconds. Not
+          nanopayment settlement on Arc, re-marked and reconciled every {blockSeconds} seconds. Not
           a trading chart.
         </p>
-        {/* Market selector — only when the engine runs more than one market. */}
+        {/* Market selector, only when the engine runs more than one market. */}
         {markets.length > 1 && (
           <div className="flex items-center gap-1 panel-raised rounded p-1">
             {markets.map((m) => {
@@ -149,7 +149,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** A small geometric mark — concentric ticks around a core, echoing the pool/agent ring. */
+/** A small geometric mark, concentric ticks around a core, echoing the pool/agent ring. */
 function Logo() {
   return (
     <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">

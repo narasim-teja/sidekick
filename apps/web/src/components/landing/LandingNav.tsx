@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * LandingNav — the sticky masthead for the marketing page. Carries the wordmark, a small set of
+ * LandingNav: the sticky masthead for the marketing page. Carries the wordmark, a small set of
  * in-page anchors, a "testnet · Arc" provenance chip (honest about what's live), and the primary
- * CTA — "Enter the venue ↗" — which is the whole point of the page: send a developer/judge into the
+ * CTA: "Enter the venue ↗", which is the whole point of the page: send a developer/judge into the
  * live `/dashboard` instrument panel. Becomes a frosted hairline bar once the user scrolls past the
  * hero fold.
  */
@@ -69,7 +69,7 @@ export function LandingNav() {
   );
 }
 
-/** The concentric-tick mark — echoes the dashboard logo / the pool ring. */
+/** The concentric-tick mark, echoes the dashboard logo / the pool ring. */
 function Mark() {
   return (
     <svg width="28" height="28" viewBox="0 0 34 34" aria-hidden="true">

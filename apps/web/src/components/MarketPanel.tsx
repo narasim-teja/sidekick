@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * MarketPanel — the per-market instrument cluster (Doc 2 §7.1, panel 1):
+ * MarketPanel: the per-market instrument cluster (Doc 2 §7.1, panel 1):
  *   • live mark + provenance badge (so a synthetic fallback is labelled honestly)
  *   • the convex funding curve `clamp(α·S·|S|, ±r_max)` drawn, with the live skew marked on it
  *   • skew vs the Layer-2 OI cap as a gauge
  *   • open interest long / short
  *
- * The funding curve is the visual that proves "flat near balance, steep near the extremes" — the
+ * The funding curve is the visual that proves "flat near balance, steep near the extremes", the
  * single most defensible piece of the funding design (Doc 1 §4.1).
  */
 
@@ -115,7 +115,7 @@ export function MarketPanel({
         {/* Mark */}
         <div className="col-span-2 flex items-end justify-between">
           <Readout label="Mark" value={fmtMark(state.mark)} size="xl" color="var(--fg)" />
-          {/* mark line in pool-cyan, not green — keeps the live-green reserved for the funding-curve
+          {/* mark line in pool-cyan, not green, keeps the live-green reserved for the funding-curve
               skew dot below and stops two greens fighting in one panel */}
           <Sparkline data={markHistory} color="var(--accent-pool)" width={140} height={40} />
         </div>

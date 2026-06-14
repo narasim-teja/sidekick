@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * SettlementStream — the live nanopayment console (Doc 2 §7.1, panel 2).
+ * SettlementStream: the live nanopayment console (Doc 2 §7.1, panel 2).
  *
  * Each settlement event scrolls in as a console row. The three `kind`s are labelled distinctly so the
  * **Gateway nanopayment** (`margin-call`, the headline sub-cent off-chain x402 payment) reads apart
- * from internal contract moves (`funding`, `auto-settle`) — this is the §5-Layer-B honesty the doc
+ * from internal contract moves (`funding`, `auto-settle`), this is the §5-Layer-B honesty the doc
  * insists on. A running tally per kind sits at the top.
  *
- * The visual point: hundreds of sub-cent rows ticking by, agent ↔ pool, every block — the "thousands
+ * The visual point: hundreds of sub-cent rows ticking by, agent ↔ pool, every block, the "thousands
  * of sub-cent payments" claim, made literal.
  */
 
@@ -101,7 +101,7 @@ export function SettlementStream({ feed }: { feed: SettlementEvent[] }) {
       <p className="mt-2 pt-2 border-t border-[var(--line)] text-[10px] text-[var(--fg-dim)] leading-relaxed">
         <span style={{ color: "var(--accent-nano)" }}>NANOPAYMENT</span> = a real x402 Gateway
         off-chain authorization (the sub-cent payment that makes per-block funding viable). FUNDING
-        / AUTO-SETTLE are internal contract moves — shown distinct so settlement swings are never
+        / AUTO-SETTLE are internal contract moves, shown distinct so settlement swings are never
         read as PnL.
       </p>
     </Panel>

@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * PositionsTable — every live position, its margin health, and the live decrement (Doc 2 §7.1, panel 3).
+ * PositionsTable: every live position, its margin health, and the live decrement (Doc 2 §7.1, panel 3).
  *
  * The load-bearing column is `outcome` + the notional-before→after delta: when the dark agent goes
- * silent you watch its notional step DOWN block by block (`N' = E/m`) instead of a liquidation cliff —
+ * silent you watch its notional step DOWN block by block (`N' = E/m`) instead of a liquidation cliff , 
  * the anti-liquidation proof, on camera (Doc 3 §11 step 3). A small inline bar shows how far each
  * position has decremented from its peak.
  */
@@ -38,7 +38,7 @@ export function PositionsTable({ positions }: { positions: PositionState[] }) {
   return (
     <Panel
       title="Positions"
-      hint="unified accounts — trader · MM · funding · dark"
+      hint="unified accounts: trader · MM · funding · dark"
       className="h-full"
     >
       <div className="overflow-x-auto scroll-thin">
@@ -119,7 +119,7 @@ export function PositionsTable({ positions }: { positions: PositionState[] }) {
                     className="py-2 text-right tnum"
                     style={{ color: funding >= 0 ? "var(--accent-long)" : "var(--accent-short)" }}
                   >
-                    {funding === 0 ? "—" : usd(funding, { sign: true })}
+                    {funding === 0 ? "-" : usd(funding, { sign: true })}
                   </td>
                   <td className="py-2 text-right pr-1">
                     <Chip color={meta.color} filled={p.outcome === "decrement"}>
@@ -134,7 +134,7 @@ export function PositionsTable({ positions }: { positions: PositionState[] }) {
       </div>
       <p className="mt-3 pt-2 border-t border-[var(--line)] text-[10px] text-[var(--fg-dim)] leading-relaxed">
         No liquidations. An unanswered margin call shrinks the position to maintenance-adequacy (
-        <span className="tnum">N′ = E / m</span>) — a smooth trim, never a penalty cliff.
+        <span className="tnum">N′ = E / m</span>), a smooth trim, never a penalty cliff.
       </p>
     </Panel>
   );

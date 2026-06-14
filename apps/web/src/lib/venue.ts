@@ -1,12 +1,12 @@
 /**
  * Venue constants + identity mapping for the dashboard.
  *
- * The Arc facts mirror `@sidekick/shared` (`constants.ts`) — duplicated to keep the browser bundle
+ * The Arc facts mirror `@sidekick/shared` (`constants.ts`), duplicated to keep the browser bundle
  * free of the shared package's viem dependency. Source of truth is `packages/shared/src/constants.ts`.
  *
- * Agent identity: the demo agents are HD-derived EOAs (long/short/mm/funding/dark at indices 1–5 off
+ * Agent identity: the demo agents are HD-derived EOAs (long/short/mm/funding/dark at indices 1-5 off
  * one seed; funder at index 0). The dashboard cannot derive keys (no mnemonic in the browser), and
- * does not need to — it only needs to LABEL an address. So at build/deploy time the five demo
+ * does not need to, it only needs to LABEL an address. So at build/deploy time the five demo
  * addresses are provided via `NEXT_PUBLIC_AGENTS` (a JSON map of `address → role`), and the engine's
  * checkpoint operator is the pool/operator. Any unmapped address renders as a shortened hex with a
  * generated identicon hue. This keeps the dashboard a pure read-only client.
@@ -31,7 +31,7 @@ export function arcscanAddress(address: string): string {
 export const AGENT_ROLES = ["long", "short", "mm", "funding", "dark"] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
 
-/** Human-readable identity for an agent role — the strategy the agent runs (Doc 2 §4.1). */
+/** Human-readable identity for an agent role: the strategy the agent runs (Doc 2 §4.1). */
 export interface RoleProfile {
   role: AgentRole | "pool" | "operator" | "unknown";
   /** Short label shown in tables / nodes. */
@@ -47,34 +47,34 @@ export const ROLE_PROFILES: Record<AgentRole | "pool" | "operator" | "unknown", 
     role: "long",
     label: "LONG",
     strategy:
-      "Directional long — opens levered, answers per-block margin calls, holds on the funding signal.",
+      "Directional long: opens levered, answers per-block margin calls, holds on the funding signal.",
     accent: "var(--accent-long)",
   },
   short: {
     role: "short",
     label: "SHORT",
-    strategy: "Directional short — balances the book, answers calls from its funded balance.",
+    strategy: "Directional short: balances the book, answers calls from its funded balance.",
     accent: "var(--accent-short)",
   },
   mm: {
     role: "mm",
     label: "MARKET-MAKER",
     strategy:
-      "Watches pool skew vs cap; takes the balancing side to earn funding carry — skew self-corrects on camera.",
+      "Watches pool skew vs cap; takes the balancing side to earn funding carry, skew self-corrects on camera.",
     accent: "var(--accent-mm)",
   },
   funding: {
     role: "funding",
     label: "FUNDING-STRATEGY",
     strategy:
-      "The hero: holds ~pure funding exposure — rides the funding-receiving side while shedding price risk.",
+      "The hero: holds ~pure funding exposure that rides the funding-receiving side while shedding price risk.",
     accent: "var(--accent-funding)",
   },
   dark: {
     role: "dark",
     label: "DARK",
     strategy:
-      "Goes silent on purpose — stops answering calls so the venue decrements it smoothly toward zero. No liquidation.",
+      "Goes silent on purpose: stops answering calls so the venue decrements it smoothly toward zero. No liquidation.",
     accent: "var(--accent-dark)",
   },
   pool: {
@@ -87,7 +87,7 @@ export const ROLE_PROFILES: Record<AgentRole | "pool" | "operator" | "unknown", 
   operator: {
     role: "operator",
     label: "OPERATOR",
-    strategy: "The engine — runs the per-block loop and lands the on-chain checkpoint.",
+    strategy: "The engine that runs the per-block loop and lands the on-chain checkpoint.",
     accent: "var(--fg-dim)",
   },
   unknown: {
@@ -99,14 +99,13 @@ export const ROLE_PROFILES: Record<AgentRole | "pool" | "operator" | "unknown", 
 };
 
 /**
- * The demo agents' deterministic addresses (HD indices 1–5 off the public dev mnemonic). These are the
- * SAME addresses the replay uses AND the addresses `bun run demo` funds when run with the default dev
- * seed — so the dashboard labels roles out-of-the-box in replay mode and in the default live demo,
- * with NO env config. For a custom live fleet (a non-dev `AGENTS_MNEMONIC`), override via
- * `NEXT_PUBLIC_AGENTS` (a JSON `{address: role}` map), which takes precedence.
+ * The REPLAY fixture's agent addresses (the canned demo `replay.ts` plays when there is no live
+ * engine). They are pinned literals so the dashboard labels roles out-of-the-box in replay mode with
+ * NO env config. (Historically these were also the addresses the old HD demo fleet funded; the LIVE
+ * fleet now signs through Circle MPC wallets whose addresses are not derived from a seed.)
  *
- * Source of truth for the derivation: `@sidekick/sdk` `deriveDemoAgents(DEV_MNEMONIC)` (indices 1–5 in
- * AGENT_ROLES order). Pinned here as literals to keep the dashboard a zero-dependency consumer.
+ * For a LIVE fleet, label each Circle wallet's address by role via `NEXT_PUBLIC_AGENTS` (a JSON
+ * `{address: role}` map), which takes precedence over these replay-fixture defaults.
  */
 export const DEMO_AGENT_ADDRESSES: Record<AgentRole, string> = {
   long: "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
@@ -121,9 +120,9 @@ const DEMO_AGENTS: Record<string, AgentRole> = Object.fromEntries(
 );
 
 /**
- * Build the address→role map: the built-in demo agents, overlaid with any `NEXT_PUBLIC_AGENTS` env
- * (a JSON object mapping lowercase address → role). The env wins for a custom live fleet; absent it,
- * the demo addresses are still labelled. Unmapped addresses render as shortened hex.
+ * Build the address→role map: the replay-fixture demo agents, overlaid with any `NEXT_PUBLIC_AGENTS`
+ * env (a JSON object mapping lowercase address → role). The env wins for a live (Circle-wallet) fleet;
+ * absent it, the replay-fixture addresses are still labelled. Unmapped addresses render as shortened hex.
  */
 function parseAgentMap(): Map<string, AgentRole> {
   const map = new Map<string, AgentRole>();
@@ -138,7 +137,7 @@ function parseAgentMap(): Map<string, AgentRole> {
         }
       }
     } catch {
-      /* malformed — keep the built-in demo labels */
+      /* malformed, keep the built-in demo labels */
     }
   }
   return map;
@@ -158,7 +157,7 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-/** A stable hue [0,360) derived from an address — for identicon dots when no role is known. */
+/** A stable hue [0,360) derived from an address, for identicon dots when no role is known. */
 export function addressHue(address: string): number {
   let h = 0;
   for (let i = 2; i < address.length; i++) h = (h * 31 + address.charCodeAt(i)) % 360;

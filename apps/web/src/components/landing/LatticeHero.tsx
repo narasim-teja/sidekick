@@ -1,33 +1,33 @@
 "use client";
 
 /**
- * LatticeHero — the landing page centerpiece. A bespoke, self-running three.js scene (NOT the
+ * LatticeHero: the landing page centerpiece. A bespoke, self-running three.js scene (NOT the
  * dashboard's data-fed PacketHero) that dramatizes the venue's one irreducible idea: a continuous
  * settlement lattice where thousands of sub-cent payments stream between agents and a central pool,
- * every block, forever — no human in the loop.
+ * every block, forever, no human in the loop.
  *
  * What you see, and what each thing means (the scene IS the pitch):
- *   • CORE      — the pool: the universal counterparty every position settles against.
- *   • RING      — autonomous agent nodes (long/short/mm/funding/dark), each a different signal color.
- *   • PACKETS   — sub-cent settlement payments flying agent↔pool. Magenta = the x402 Gateway
+ *   • CORE     , the pool: the universal counterparty every position settles against.
+ *   • RING     , autonomous agent nodes (long/short/mm/funding/dark), each a different signal color.
+ *   • PACKETS  , sub-cent settlement payments flying agent↔pool. Magenta = the x402 Gateway
  *                 nanopayment (the headline), amber = the per-block funding stream, cyan = auto-settle.
- *   • BLOCK PULSE — a ring expands from the core ~every 2s: a new Arc block. The whole venue
+ *   • BLOCK PULSE, a ring expands from the core ~every 2s: a new Arc block. The whole venue
  *                 re-marks, re-funds, reconciles. The lattice breathes once per block.
- *   • DECREMENT — occasionally an agent node smoothly *shrinks* (no explosion): a position curing
+ *   • DECREMENT, occasionally an agent node smoothly *shrinks* (no explosion): a position curing
  *                 margin by decrementing, not liquidating. The thesis, animated.
  *
- * It is purely decorative (aria-hidden) and never gates content — the headline reads over it, and a
+ * It is purely decorative (aria-hidden) and never gates content, the headline reads over it, and a
  * static gradient shows if WebGL is unavailable. Honors prefers-reduced-motion: the render loop runs
  * a single frame and stops, so the lattice is a still composition rather than motion.
  *
  * Pure three.js (no react-three-fiber) to match the dashboard's bundle discipline; every object is
- * created once and disposed on unmount, with a bounded, recycled packet pool — no per-frame alloc.
+ * created once and disposed on unmount, with a bounded, recycled packet pool, no per-frame alloc.
  */
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-// Signal palette — mirrors globals.css so the scene is continuous with the rest of the identity.
+// Signal palette, mirrors globals.css so the scene is continuous with the rest of the identity.
 const COL = {
   pool: 0x57c7ff,
   long: 0x38f9b0,
@@ -53,7 +53,7 @@ const AGENTS: { role: keyof typeof COL; weight: number }[] = [
 ];
 
 const PACKET_KINDS = [
-  { color: COL.nano, weight: 0.5, scale: 1.8 }, // the headline nanopayment — most common, biggest
+  { color: COL.nano, weight: 0.5, scale: 1.8 }, // the headline nanopayment, most common, biggest
   { color: COL.funding, weight: 0.35, scale: 1.0 }, // funding stream
   { color: COL.autoSettle, weight: 0.15, scale: 1.0 }, // auto-settle
 ] as const;
@@ -100,7 +100,7 @@ export function LatticeHero({ onUnsupported }: { onUnsupported?: () => void }) {
     // Camera: the known-good 3/4-top view of the lattice, centered in its own canvas. Horizontal
     // composition (placing the lattice in the right portion of the hero, as a counterweight to the
     // left-aligned headline) is handled in the LAYOUT (the canvas container is offset right on wide
-    // viewports) rather than by panning the camera — far more predictable than fighting the frustum.
+    // viewports) rather than by panning the camera, far more predictable than fighting the frustum.
     const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 100);
     camera.position.set(0, 4.6, 12.5);
     // Look at a point BELOW the ring so the lattice (pool core + nodes) rises into the vertical middle
@@ -305,7 +305,7 @@ export function LatticeHero({ onUnsupported }: { onUnsupported?: () => void }) {
       const nd = candidates[Math.floor(Math.random() * candidates.length)];
       if (!nd) return;
       nd.targetScale = 0.42 + Math.random() * 0.12;
-      // Regrow after a beat — the agent re-opens / cures and the lattice heals.
+      // Regrow after a beat, the agent re-opens / cures and the lattice heals.
       globalThis.setTimeout(() => {
         nd.targetScale = 0.85 + Math.random() * 0.15;
       }, 2600);
@@ -366,7 +366,7 @@ export function LatticeHero({ onUnsupported }: { onUnsupported?: () => void }) {
         if (Math.random() < 0.35) triggerDecrement();
       }
 
-      // Continuous packet stream — many sub-cent payments between blocks.
+      // Continuous packet stream, many sub-cent payments between blocks.
       spawnTimer += dt;
       const spawnEvery = 0.035; // ~28 packets/sec → a dense but legible swarm
       while (spawnTimer >= spawnEvery) {

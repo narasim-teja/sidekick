@@ -1,21 +1,21 @@
 /**
- * Deterministic demo replay — the dashboard's fallback when the live engine is unreachable.
+ * Deterministic demo replay, the dashboard's fallback when the live engine is unreachable.
  *
  * A cold Vercel URL (no local engine) must NEVER be blank for a judge. So this module synthesizes a
  * faithful, on-thesis sequence of {@link MarketBlockState} frames that exercises every panel and
  * follows the Doc 3 §11 demo arc:
  *
- *   1. long + short open early — the per-block loop is alive, the book has two sides.
- *   2. the funding-strategy agent (hero) opens — rides the funding-receiving side.
- *   3. the long pushes skew — convex funding ramps, the OI cap tightens.
- *   4. the MM arrives — takes the balancing side, skew self-corrects.
- *   5. the dark agent goes silent — decrements smoothly toward zero (no liquidation).
+ *   1. long + short open early, the per-block loop is alive, the book has two sides.
+ *   2. the funding-strategy agent (hero) opens, rides the funding-receiving side.
+ *   3. the long pushes skew, convex funding ramps, the OI cap tightens.
+ *   4. the MM arrives, takes the balancing side, skew self-corrects.
+ *   5. the dark agent goes silent, decrements smoothly toward zero (no liquidation).
  *
  * The math is the real venue math (Doc 1 §4): EMA-smoothed skew, the convex clamped funding rate
  * `clamp(α·S·|S|, ±r_max)`, the per-block payment `N·rate·(Δt/T)`, and the §4.2 decrement
  * `N' = E/m`. It runs on a seeded PRNG so the replay is identical every load (the same backup
  * property the Phase-1 sim has). This is a *visualization* of the venue, honestly badged REPLAY in
- * the UI — not a claim of a live run.
+ * the UI, not a claim of a live run.
  *
  * @see docs/01-PROJECT-AND-ARCHITECTURE.md §4 (the formulas this mirrors)
  * @see docs/03-JUDGE-EXPLAINER.md §11 (the demo sequence)
@@ -35,7 +35,7 @@ const BLOCK_SECONDS = 2;
 const FUNDING_PERIOD_SECONDS = 8 * 60 * 60;
 const DT_OVER_T = BLOCK_SECONDS / FUNDING_PERIOD_SECONDS;
 
-/** Demo agent addresses — the single source of truth (also the dashboard's role labels) lives in `venue.ts`. */
+/** Demo agent addresses, the single source of truth (also the dashboard's role labels) lives in `venue.ts`. */
 const ADDR = DEMO_AGENT_ADDRESSES;
 
 interface SimPosition {
@@ -52,7 +52,7 @@ interface SimPosition {
   alive: boolean;
 }
 
-/** A mulberry32 seeded PRNG — deterministic, no deps. */
+/** A mulberry32 seeded PRNG, deterministic, no deps. */
 function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -97,7 +97,7 @@ export class DemoReplay {
     this.stageEntries();
 
     // Price: a deterministic scripted arc (with light jitter) so every thesis beat fires reliably on a
-    // loop — this is a demo replay, so we shape the mark rather than hope GBM erodes the dark agent. A
+    // loop, this is a demo replay, so we shape the mark rather than hope GBM erodes the dark agent. A
     // sustained down-leg after the dark 20x-long opens (blk 9) walks it through smooth decrement; the
     // mark then recovers so the loop reads cleanly when it repeats. Jitter keeps it alive, not robotic.
     const jitter = (this.rand() - 0.5) * 2 * 0.0009;
@@ -132,7 +132,7 @@ export class DemoReplay {
         events.push(this.event(p.account, "funding", fundingPay));
       }
 
-      // 3. check against post-funding equity; 4–6 call / settle / decrement (Doc 1 §4.3).
+      // 3. check against post-funding equity; 4-6 call / settle / decrement (Doc 1 §4.3).
       const required = PARAMS.m * p.notional;
       let outcome: PositionState["outcome"] = "healthy";
       let call = 0;
@@ -150,14 +150,14 @@ export class DemoReplay {
         } else if (eq > 0) {
           // No-pay path → decrement to maintenance-adequate: N' = E/m (Doc 1 §4.2). After the cut the
           // position's margin equals its equity (eq backs N'·m exactly). The margin the trader lost on
-          // the closed slice (p.margin − eq) is the pool's gain as counterparty — conservation: the
+          // the closed slice (p.margin − eq) is the pool's gain as counterparty, conservation: the
           // pool is −Σ(trader PnL), realized PnL books into pool capital on every close/decrement.
           this.poolCapital += Math.max(0, p.margin - eq);
           p.notional = eq / PARAMS.m;
           p.margin = eq;
           // Re-anchor the entry to the current mark: the retained slice has had its price PnL realized
           // into `margin`, so it must NOT be re-counted next block. (Forgetting this re-applies the full
-          // since-open loss every block and gaps the position — the exact double-count the §4.3 ordering
+          // since-open loss every block and gaps the position, the exact double-count the §4.3 ordering
           // is designed to prevent.)
           p.entryMark = this.price;
           outcome = "decrement";
@@ -250,10 +250,10 @@ export class DemoReplay {
         alive: true,
       });
     };
-    // Notionals are scaled for legibility — at $1-margin testnet sizes funding rounds below the 6dp
+    // Notionals are scaled for legibility, at $1-margin testnet sizes funding rounds below the 6dp
     // dust floor (the exact artifact Doc 2 §4.4 hit live), so the demo uses realistic notionals where
     // the per-block funding + decrement are visible. These are display values, not real testnet USDC.
-    // Answerers (long/funding) are opened thin — high leverage, little excess margin — so the gentle
+    // Answerers (long/funding) are opened thin, high leverage, little excess margin, so the gentle
     // adverse leg calls them within a handful of blocks and they cure every block (a rich, early
     // settlement stream). The short/MM run safer (they balance the book and rarely get called).
     switch (this.tick) {
@@ -289,18 +289,18 @@ export class DemoReplay {
   /**
    * The deterministic per-block return that shapes the demo arc (a repeating ~96-block cycle so the
    * narrative loops): flat while the book builds, a sustained down-leg once the dark 20x-long is open
-   * (blocks ~14–40) that erodes its thin margin into smooth decrements, then a recovery so the next
-   * cycle reads clean. Magnitudes are small per block (≤ ~0.4%) — realistic, not a crash.
+   * (blocks ~14-40) that erodes its thin margin into smooth decrements, then a recovery so the next
+   * cycle reads clean. Magnitudes are small per block (≤ ~0.4%), realistic, not a crash.
    */
   private scriptedDrift(): number {
     const phase = this.tick % 110;
-    if (phase < 9) return 0.0005; // brief build — the book forms two-sided
-    if (phase < 64) return -0.0019; // gentle adverse leg — calls the levered answerers every block (rich
+    if (phase < 9) return 0.0005; // brief build, the book forms two-sided
+    if (phase < 64) return -0.0019; // gentle adverse leg, calls the levered answerers every block (rich
     //                                 nanopayment stream) and walks the silent dark long through SMOOTH,
     //                                 repeated decrements; the per-block loss never exceeds the position's
     //                                 equity, so it trims toward zero and never gaps (no cliff).
     if (phase < 76) return -0.0002; // taper
-    if (phase < 104) return 0.0026; // recovery — positions heal, the book rebuilds before the loop repeats
+    if (phase < 104) return 0.0026; // recovery, positions heal, the book rebuilds before the loop repeats
     return 0.0005;
   }
 

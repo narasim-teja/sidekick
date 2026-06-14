@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `useFeed` — the dashboard's single data source.
+ * `useFeed`: the dashboard's single data source.
  *
  * It first tries the LIVE engine: a `/state` REST snapshot to paint immediately, then the `/ws`
  * stream for per-block pushes. If the engine is unreachable within {@link LIVE_PROBE_TIMEOUT_MS}, it
@@ -10,7 +10,7 @@
  *
  * Returns the latest {@link MarketBlockState} per market, an ordered settlement feed (accumulated
  * across blocks for the stream/3D view), the feed {@link FeedMode}, and the engine {@link EngineStatus}
- * / {@link VenueDescriptor} when live. All consumers read this one hook — there is no other I/O.
+ * / {@link VenueDescriptor} when live. All consumers read this one hook, there is no other I/O.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,7 +42,7 @@ export interface Feed {
   focus: MarketBlockState | undefined;
   /** Accumulated settlement events for the focused market (newest last), capped. */
   feed: SettlementEvent[];
-  /** The most recent batch of settlement events for the focused market — for spawning packets. */
+  /** The most recent batch of settlement events for the focused market, for spawning packets. */
   lastEvents: SettlementEvent[];
   status: EngineStatus | undefined;
   venue: VenueDescriptor | undefined;
@@ -119,7 +119,7 @@ export function useFeed(): Feed {
 
     const base = engineUrl();
 
-    // 1. REST bootstrap — paint immediately if the engine is up; also confirms liveness.
+    // 1. REST bootstrap, paint immediately if the engine is up; also confirms liveness.
     const bootstrap = async () => {
       try {
         const [stateRes, statusRes, venueRes] = await Promise.all([
@@ -134,7 +134,7 @@ export function useFeed(): Feed {
         markLive();
         for (const s of snapshot) ingest(s);
       } catch {
-        // Engine REST not reachable — the WS attempt + probe timer decide the fallback.
+        // Engine REST not reachable, the WS attempt + probe timer decide the fallback.
       }
     };
 
@@ -148,14 +148,14 @@ export function useFeed(): Feed {
       setMode("live");
     };
 
-    // 2. WS stream — the per-block heartbeat.
+    // 2. WS stream, the per-block heartbeat.
     const connectWs = () => {
       if (teardown.current) return;
       let ws: WebSocket;
       try {
         ws = new WebSocket(engineWsUrl());
       } catch {
-        return; // invalid URL / unsupported — replay fallback handles it
+        return; // invalid URL / unsupported, replay fallback handles it
       }
       wsRef.current = ws;
       ws.onopen = () => markLive();
@@ -194,7 +194,7 @@ export function useFeed(): Feed {
     void bootstrap();
     connectWs();
 
-    // 3. Probe timer — if nothing live arrived in time, fall back to the demo replay.
+    // 3. Probe timer, if nothing live arrived in time, fall back to the demo replay.
     probeTimer = setTimeout(() => {
       if (!teardown.current && !liveSeen.current) startReplay();
     }, LIVE_PROBE_TIMEOUT_MS);

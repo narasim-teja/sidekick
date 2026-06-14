@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * InstallConsole — the developer on-ramp, styled as a terminal window. Package-manager tabs
+ * InstallConsole: the developer on-ramp, styled as a terminal window. Package-manager tabs
  * (npm / pnpm / bun / yarn) swap the install command; a click-to-copy button puts it on the
  * clipboard. The package name is the real one the SDK publishes under (`@sidekick/sdk`).
  *
@@ -36,7 +36,7 @@ export function InstallConsole() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      /* clipboard blocked (insecure context / headless) — the command is selectable anyway */
+      /* clipboard blocked (insecure context / headless), the command is selectable anyway */
     }
   };
 
@@ -109,7 +109,7 @@ export function InstallConsole() {
         </button>
       </div>
 
-      {/* the immediate next step — what they do after install */}
+      {/* the immediate next step, what they do after install */}
       <div className="px-4 pb-4 pt-1 border-t border-[var(--line)] text-[11px] text-[var(--fg-dim)] font-mono leading-relaxed">
         <span className="text-[var(--fg-mid)]">import</span> {"{ SideKick }"}{" "}
         <span className="text-[var(--fg-mid)]">from</span>{" "}

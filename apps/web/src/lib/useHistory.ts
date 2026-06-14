@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `useSeries` — accumulate a numeric value across renders into a bounded ring buffer for sparklines.
+ * `useSeries`: accumulate a numeric value across renders into a bounded ring buffer for sparklines.
  * Keyed so switching markets resets the series cleanly. Pure client state; no I/O.
  */
 

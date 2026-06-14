@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * HeroSection — the centerpiece. Hosts the three.js {@link PacketHero} settlement network and overlays
+ * HeroSection: the centerpiece. Hosts the three.js {@link PacketHero} settlement network and overlays
  * the live headline: the funding-strategy "hero" status and the dark-agent decrement status (Doc 2 §7.2:
  * "the hero screen is the funding-strategy agent holding pure funding exposure + the dark agent
  * decrementing smoothly"), plus a running nanopayment counter.
@@ -58,7 +58,7 @@ export function HeroSection({
 
   return (
     <div className="relative panel ticked scanlines overflow-hidden" style={{ minHeight: 420 }}>
-      {/* three.js canvas — or a 2D SVG fallback if WebGL is unavailable (headless / locked-down GPU). */}
+      {/* three.js canvas, or a 2D SVG fallback if WebGL is unavailable (headless / locked-down GPU). */}
       {webglFailed ? (
         <NetworkFallback2D events={lastEvents} nodes={nodes} />
       ) : (
@@ -95,7 +95,7 @@ export function HeroSection({
           <h2 className="font-display font-bold text-2xl leading-tight">
             Thousands of sub-cent payments,
             <br />
-            <span style={{ color: "var(--accent-nano)" }}>every block</span> — made visible.
+            <span style={{ color: "var(--accent-nano)" }}>every block</span>, made visible.
           </h2>
           <p className="mt-2 text-[12px] text-[var(--fg-mid)] leading-relaxed">
             Each packet is a real settlement event flying between an agent and the pool. Magenta is
@@ -122,7 +122,7 @@ export function HeroSection({
                 line={`N ${usd(num(dark.notionalBefore))} → ${usd(num(dark.notionalAfter))}`}
                 note={
                   dark.outcome === "decrement"
-                    ? "decrementing — no liquidation"
+                    ? "decrementing, no liquidation"
                     : "silent · holding"
                 }
               />
@@ -161,7 +161,7 @@ function HeroCard({
 }
 
 /**
- * A counter readout. The value IS the truth (a count), so it renders directly — no rAF easing (which is
+ * A counter readout. The value IS the truth (a count), so it renders directly, no rAF easing (which is
  * throttled in background/headless contexts and is just sugar). A brief flash on each increment via the
  * `flash` class gives the "ticking up" feel without a fragile animation loop.
  */

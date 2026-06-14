@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * PoolHealth — the pool as the stable headline, settlement flow kept separate (Doc 2 §7.1, panel 4;
+ * PoolHealth: the pool as the stable headline, settlement flow kept separate (Doc 2 §7.1, panel 4;
  * the Ostium-borrowed clarity in Doc 1 §7 / Doc 3 §10).
  *
  * "Pool capital / LP claim value" is the big, STABLE number. Per-block margin-call + funding flow makes
- * pool USDC swing constantly, so that flow is shown as a SEPARATE, clearly-labelled stream — never
- * folded into the headline — so a judge never mistakes normal settlement movement for losses.
+ * pool USDC swing constantly, so that flow is shown as a SEPARATE, clearly-labelled stream, never
+ * folded into the headline, so a judge never mistakes normal settlement movement for losses.
  *
  * Also surfaces the gap fund (the only place bad debt enters, Doc 1 §4.2) and pool equity at mark.
  */
@@ -52,7 +52,7 @@ export function PoolHealth({
           <Sparkline data={capitalHistory} color="var(--accent-pool)" width={120} height={40} />
         </div>
 
-        {/* The SEPARATE flow line — explicitly not the headline. */}
+        {/* The SEPARATE flow line, explicitly not the headline. */}
         <div className="rounded border border-[var(--line)] bg-[var(--bg-panel-2)] px-3 py-2.5">
           <div className="flex items-center justify-between">
             <span className="eyebrow">Settlement flow · this block</span>
@@ -60,7 +60,7 @@ export function PoolHealth({
               className="tnum font-display font-semibold text-sm"
               style={{ color: flowThisBlock >= 0 ? "var(--accent-long)" : "var(--accent-short)" }}
             >
-              {flowThisBlock === 0 ? "—" : usd(flowThisBlock, { sign: true })}
+              {flowThisBlock === 0 ? "-" : usd(flowThisBlock, { sign: true })}
             </span>
           </div>
           <p className="mt-1 text-[10px] text-[var(--fg-dim)] leading-snug">

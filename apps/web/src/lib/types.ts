@@ -4,14 +4,14 @@
  * These types MIRROR the engine's public contract (`packages/engine/src/state.ts`, re-exported by
  * `@sidekick/sdk`). They are duplicated here on purpose: the dashboard is a browser bundle and
  * importing `@sidekick/engine` would drag in viem / hono / the Circle SDK (all server-only). The
- * payload is plain JSON — amounts are DECIMAL STRINGS (USDC), rates/skew are numbers — so a small
+ * payload is plain JSON, amounts are DECIMAL STRINGS (USDC), rates/skew are numbers, so a small
  * structural mirror is the clean boundary. If the engine's `state.ts` changes shape, update this file
  * to match (the two are checked against the same `/state` response at runtime).
  *
  * @see packages/engine/src/state.ts  (the canonical source of truth)
  */
 
-/** Where the mark came from — lets the UI label a synthetic fallback honestly. */
+/** Where the mark came from, lets the UI label a synthetic fallback honestly. */
 export type MarkProvenance = "stork-live" | "chainlink-live" | "synthetic-fallback";
 
 /**
@@ -52,7 +52,7 @@ export interface SettlementEvent {
 
 /** Pool health for the market (the stable headline + exposure vs cap). */
 export interface PoolState {
-  /** LP-backing capital — the stable headline number (USDC). */
+  /** LP-backing capital, the stable headline number (USDC). */
   capital: string;
   /** Gap-fund reserve (USDC). */
   gapFund: string;
@@ -66,7 +66,7 @@ export interface PoolState {
   fundingAccrued: string;
 }
 
-/** Everything observable about one market at the end of a block — the WS/REST payload. */
+/** Everything observable about one market at the end of a block, the WS/REST payload. */
 export interface MarketBlockState {
   market: string;
   /** Engine block counter (monotonic; the loop's tick, not the Arc block number). */

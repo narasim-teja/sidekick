@@ -7,7 +7,7 @@ import { Dashboard } from "@/components/Dashboard.tsx";
  * marketing landing lives at `/`; this is the read-only observability instrument panel it links into.
  */
 export const metadata: Metadata = {
-  title: "SideKick — Live Venue Instrument Panel",
+  title: "SideKick: Live Venue Instrument Panel",
   description:
     "The per-block loop, made visible: continuous funding, smooth decrement, and the x402 nanopayment settlement stream, live on Arc.",
 };

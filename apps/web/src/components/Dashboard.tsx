@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Dashboard — the live client root. Wires the single {@link useFeed} data source into every panel and
+ * Dashboard: the live client root. Wires the single {@link useFeed} data source into every panel and
  * lays out the instrument grid:
  *
  *   ┌─ Header (mode badge, chain, checkpoint) ────────────────────────────────┐
@@ -13,7 +13,7 @@
  * The hero is dynamically imported with SSR off (three.js requires the DOM). All live data is
  * client-only (the engine WS/REST feed, or the replay fallback), so the data grid renders behind a
  * `mounted` gate: SSR emits a stable shell and the first client render matches it, then the live
- * content paints — no hydration mismatch from feed floats / locale-formatted numbers. One source of
+ * content paints, no hydration mismatch from feed floats / locale-formatted numbers. One source of
  * truth: the feed.
  */
 
@@ -29,7 +29,7 @@ import { PoolHealth } from "./PoolHealth.tsx";
 import { PositionsTable } from "./PositionsTable.tsx";
 import { SettlementStream } from "./SettlementStream.tsx";
 
-// three.js can only run in the browser — load the hero with SSR disabled.
+// three.js can only run in the browser, load the hero with SSR disabled.
 const HeroSection = dynamic(() => import("./HeroSection.tsx").then((m) => m.HeroSection), {
   ssr: false,
   loading: () => (
@@ -159,13 +159,13 @@ function Footer({
     <footer className="mt-8 pt-4 border-t border-[var(--line)] flex flex-wrap items-center justify-between gap-3 text-[10px] text-[var(--fg-dim)]">
       <div className="flex items-center gap-3">
         <span>
-          SideKick Perps · observability dashboard · {markets.length ? markets.join(" · ") : "—"}
+          SideKick Perps · observability dashboard · {markets.length ? markets.join(" · ") : "-"}
         </span>
       </div>
       <div>
         {mode === "replay" ? (
           <span>
-            Engine offline — showing a deterministic replay of the venue math. Go live:{" "}
+            Engine offline, showing a deterministic replay of the venue math. Go live:{" "}
             <code className="text-[var(--fg-mid)]">bun run engine</code> →{" "}
             <code className="text-[var(--fg-mid)]">bun run demo</code> (set{" "}
             <code className="text-[var(--fg-mid)]">NEXT_PUBLIC_ENGINE_URL</code> for a remote

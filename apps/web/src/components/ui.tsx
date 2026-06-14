@@ -134,7 +134,7 @@ export function Sparkline({
   const max = Math.max(...data);
   const range = max - min || 1;
   const stepX = width / (data.length - 1);
-  // Round every coordinate deterministically — raw floats in SVG attributes differ by a ULP between
+  // Round every coordinate deterministically, raw floats in SVG attributes differ by a ULP between
   // the SSR pass and client render and trip React hydration ("y1 differs"), so we never emit them raw.
   const r1 = (n: number) => Math.round(n * 10) / 10;
   const pts = data.map((d, i) => {

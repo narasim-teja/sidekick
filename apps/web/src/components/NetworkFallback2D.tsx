@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * NetworkFallback2D — the settlement network as an SVG, used when WebGL can't initialize (headless
- * capture, locked-down GPU, very old browsers). It keeps the same concept as the three.js hero — a
+ * NetworkFallback2D: the settlement network as an SVG, used when WebGL can't initialize (headless
+ * capture, locked-down GPU, very old browsers). It keeps the same concept as the three.js hero, a
  * central pool ringed by agent nodes, with packets animating along the spokes on each settlement
- * event — so the hero panel is always legible and on-aesthetic, never blank. Pure SVG + SMIL/CSS
+ * event: so the hero panel is always legible and on-aesthetic, never blank. Pure SVG + SMIL/CSS
  * animation, zero deps.
  */
 
@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthorizationKind, SettlementEvent } from "@/lib/types.ts";
 import type { HeroNode } from "./PacketHero.tsx";
 
-// Mirror the refined CSS signal tokens (globals.css) — kept in sync with PacketHero's maps.
+// Mirror the refined CSS signal tokens (globals.css), kept in sync with PacketHero's maps.
 const KIND_COLOR: Record<AuthorizationKind, string> = {
   funding: "#ffb14a",
   "auto-settle": "#4ec5ff",

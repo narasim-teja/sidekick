@@ -35,7 +35,10 @@ const marketEnum = z.enum(MARKET_SYMBOLS as [MarketSymbol, ...MarketSymbol[]]);
 
 /** Wrap a value as the MCP text-content result the model reads (compact JSON, pretty-printed). */
 function ok(value: unknown): { content: [{ type: "text"; text: string }] } {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+  // The SDK returns on-chain quantities as bigint (e.g. ERC-8004 agentId, owed amounts); JSON.stringify
+  // can't serialize BigInt, so coerce them to strings at the boundary the model reads.
+  const text = JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2);
+  return { content: [{ type: "text", text }] };
 }
 
 /** Wrap an error as an MCP tool error result (so the model sees the failure, not a thrown exception). */
@@ -91,6 +94,26 @@ export function buildServer(config: McpConfig): McpServer {
       inputSchema: z.object({}),
     },
     async () => ok({ address: sk.address, chainId: sk.chainId, engineUrl: sk.engineUrl }),
+  );
+
+  server.registerTool(
+    "sidekick_identity",
+    {
+      title: "This agent's ERC-8004 identity",
+      description:
+        "Resolve this agent's on-chain ERC-8004 (Trustless Agents) identity: the linked agentId " +
+        "(0 if unregistered), the canonical payee agentWallet, and the portable namespaced id " +
+        "`eip155:<chainId>:<registry>/<agentId>` an external system uses to look up reputation. " +
+        "An unregistered agent can mint one with `sidekick_onboard` (registerIdentity).",
+      inputSchema: z.object({}),
+    },
+    async () => {
+      try {
+        return ok(await sk.agentIdentity());
+      } catch (err) {
+        return fail(err);
+      }
+    },
   );
 
   // ── Read live state ───────────────────────────────────────────────────────────────
@@ -294,6 +317,54 @@ export function buildServer(config: McpConfig): McpServer {
     async ({ market }) => {
       try {
         return ok(await sk.answerMarginCall(market));
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  // ── Record (the ERC-8004 reputation leg — closes discover→pay→record) ─────────────
+  server.registerTool(
+    "sidekick_record_payment",
+    {
+      title: "Record a settled payment as ERC-8004 reputation",
+      description:
+        "Record a settled margin-call Nanopayment as on-chain ERC-8004 reputation feedback for an " +
+        "agent (the 'record' leg of the agentic loop). Anchors keccak256(txHash) as proof-of-payment " +
+        "in the Reputation Registry. Costs USDC gas. The venue is the natural attester.",
+      inputSchema: z.object({
+        agentId: z.string().describe("The ERC-8004 agentId to credit (decimal string)."),
+        txHash: z.string().describe("The settle transaction hash to anchor as proof-of-payment."),
+        market: marketEnum.optional().describe("Market the payment was for (tags the feedback)."),
+      }),
+    },
+    async ({ agentId, txHash, market }) => {
+      try {
+        const hash = await sk.recordPayment(BigInt(agentId), {
+          txHash: txHash as `0x${string}`,
+          market,
+        });
+        return ok({ hash, confirmed: await sk.confirm(hash) });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    "sidekick_reputation",
+    {
+      title: "An agent's ERC-8004 reputation summary",
+      description:
+        "Read an agent's running ERC-8004 reputation: the feedback count + aggregate value from the " +
+        "Reputation Registry. Resolve 'how trustworthy is this agent' before transacting.",
+      inputSchema: z.object({
+        agentId: z.string().describe("The ERC-8004 agentId (decimal string)."),
+      }),
+    },
+    async ({ agentId }) => {
+      try {
+        return ok(await sk.reputationSummary(BigInt(agentId)));
       } catch (err) {
         return fail(err);
       }

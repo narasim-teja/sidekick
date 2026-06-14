@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "fund": "bun run src/scripts/fund.ts",
+    "register:identities": "bun run src/scripts/register-identities.ts",
     "demo": "bun run src/orchestrator.ts",
     "agent:long": "bun run src/agents/long.ts",
     "agent:short": "bun run src/agents/short.ts",

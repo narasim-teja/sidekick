@@ -6,7 +6,8 @@
   "description": "Self-contained, copy-pasteable examples of building on the SideKick venue with @sidekick/sdk. Start with standalone-agent.ts — a complete external trading agent in one file.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "agent": "bun run standalone-agent.ts"
+    "agent": "bun run standalone-agent.ts",
+    "agent:circle": "bun run circle-wallet-agent.ts"
   },
   "dependencies": {
     "@sidekick/sdk": "workspace:*"

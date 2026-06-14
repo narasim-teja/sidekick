@@ -156,12 +156,13 @@ contract Deploy is Script {
         console2.log("AccountManager:", address(accountManager));
     }
 
-    function _markets() internal pure returns (MarketDef[5] memory m) {
+    function _markets() internal pure returns (MarketDef[6] memory m) {
         m[0] = MarketDef(bytes32("BTC-PERP"), "BTC-PERP", "BTCUSD", "SideKick BTC-PERP LP", "slpUSDC-BTC");
         m[1] = MarketDef(bytes32("ETH-PERP"), "ETH-PERP", "ETHUSD", "SideKick ETH-PERP LP", "slpUSDC-ETH");
         m[2] = MarketDef(bytes32("SOL-PERP"), "SOL-PERP", "SOLUSD", "SideKick SOL-PERP LP", "slpUSDC-SOL");
         m[3] = MarketDef(bytes32("HYPE-PERP"), "HYPE-PERP", "HYPEUSD", "SideKick HYPE-PERP LP", "slpUSDC-HYPE");
         m[4] = MarketDef(bytes32("LINK-PERP"), "LINK-PERP", "LINKUSD", "SideKick LINK-PERP LP", "slpUSDC-LINK");
+        m[5] = MarketDef(bytes32("XAU-PERP"), "XAU-PERP", "XAUUSD", "SideKick XAU-PERP LP", "slpUSDC-XAU");
     }
 
     /// @notice The market SET to deploy, filtered from the canonical five by the MARKETS env var.
@@ -170,12 +171,12 @@ contract Deploy is Script {
     ///      registry imposes no count, so deploying a subset is first-class — only this script ever
     ///      bounded it to five. Returns a right-sized dynamic array.
     function _selectedMarkets() internal view returns (MarketDef[] memory selected) {
-        MarketDef[5] memory all = _markets();
+        MarketDef[6] memory all = _markets();
         string memory raw = vm.envOr("MARKETS", string(""));
 
         if (bytes(raw).length == 0 || _eq(raw, "all")) {
-            selected = new MarketDef[](5);
-            for (uint256 i = 0; i < 5; i++) {
+            selected = new MarketDef[](6);
+            for (uint256 i = 0; i < 6; i++) {
                 selected[i] = all[i];
             }
             return selected;
@@ -184,14 +185,14 @@ contract Deploy is Script {
         string[] memory wanted = vm.split(raw, ",");
         // First pass: count matches so we can size the output array exactly.
         uint256 n;
-        for (uint256 i = 0; i < 5; i++) {
+        for (uint256 i = 0; i < 6; i++) {
             if (_contains(wanted, all[i].symbol)) n++;
         }
         require(n > 0, "MARKETS matched no known market");
 
         selected = new MarketDef[](n);
         uint256 j;
-        for (uint256 i = 0; i < 5; i++) {
+        for (uint256 i = 0; i < 6; i++) {
             if (_contains(wanted, all[i].symbol)) {
                 selected[j++] = all[i];
             }

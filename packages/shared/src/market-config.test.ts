@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Hex } from "viem";
 import { resolveMarketSet, resolveOracle, resolveOracleSource } from "./market-config.ts";
+import { MARKET_SYMBOLS } from "./markets.ts";
 import { chainlinkFeedId, oracleEnvKeySuffix } from "./oracle.ts";
 
 const FEED = `0x${"a".repeat(64)}` as Hex;
@@ -81,11 +82,11 @@ describe("chainlinkFeedId", () => {
 });
 
 describe("resolveMarketSet", () => {
-  test("unset → all five", () => {
-    expect(resolveMarketSet({}).length).toBe(5);
+  test("unset → all markets", () => {
+    expect(resolveMarketSet({})).toEqual([...MARKET_SYMBOLS]);
   });
-  test("'all' → all five", () => {
-    expect(resolveMarketSet({ MARKETS: "all" }).length).toBe(5);
+  test("'all' → all markets", () => {
+    expect(resolveMarketSet({ MARKETS: "all" })).toEqual([...MARKET_SYMBOLS]);
   });
   test("a comma list selects a subset and trims whitespace", () => {
     expect(resolveMarketSet({ MARKETS: "BTC-PERP, LINK-PERP" })).toEqual(["BTC-PERP", "LINK-PERP"]);

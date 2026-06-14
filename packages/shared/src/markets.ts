@@ -14,7 +14,13 @@ import type { Hex } from "viem";
 import type { OracleConfig } from "./oracle.ts";
 import { storkAssetId } from "./oracle.ts";
 
-export type MarketSymbol = "BTC-PERP" | "ETH-PERP" | "SOL-PERP" | "HYPE-PERP" | "LINK-PERP";
+export type MarketSymbol =
+  | "BTC-PERP"
+  | "ETH-PERP"
+  | "SOL-PERP"
+  | "HYPE-PERP"
+  | "LINK-PERP"
+  | "XAU-PERP";
 
 /**
  * Funding + risk parameters for one market. Mirrors the §4 formulas exactly:
@@ -139,6 +145,17 @@ export const MARKETS: Record<MarketSymbol, MarketConfig> = {
     // confirmed (Spike B) to drive the Connect-the-World on-chain write on this market.
     oracle: storkOracle("LINKUSD"),
     note: "on-thesis (oracle token; pairs with the Chainlink/CRE story)",
+  },
+  "XAU-PERP": {
+    symbol: "XAU-PERP",
+    name: "Gold",
+    asset: "XAUUSD",
+    params: DEFAULT_PARAMS,
+    // Stork serves XAUUSD live on Arc testnet (verified ~$4,218, sub-second fresh) — a real on-chain
+    // commodity mark, and the second Stork market alongside BTC (so Stork is proven live, co-equal to
+    // the Chainlink markets ETH/LINK).
+    oracle: storkOracle("XAUUSD"),
+    note: "commodity (gold); Stork oracle — proves the venue isn't crypto-only",
   },
 };
 

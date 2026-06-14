@@ -101,6 +101,13 @@ export const ARC_TESTNET_DEPLOYMENT: VenueDeployment = {
       // single-forwarder MarkReceiver 0x1f221318bb193473b3a4f8dcbaa9fc2a71c2b45f.
       oracleAdapter: "0xb9f26b08c50aefe367308d89f7a2dacf2aec5d37" as Address,
     },
+    // Added 2026-06-14 via add-market-deploy.ts (new market on the live venue, no full redeploy) —
+    // Gold, Stork oracle. StorkAdapter reads keccak256("XAUUSD") from the shared Stork contract.
+    "XAU-PERP": {
+      pool: "0x829b522152496c056ed74cc2881ba467bfdc0a9a" as Address,
+      lpToken: "0x94c338b106fb6cb047b5931c0e6567d6645ad3c1" as Address,
+      oracleAdapter: "0xa9e662ac30f71adbff822864a9d0f946d75d0d30" as Address,
+    },
   },
 };
 

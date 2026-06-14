@@ -92,6 +92,21 @@ cp markfeed/config.eth.json markfeed/config.json   # restore the default
 > `MarkReceiver` below is the **isolated** CRE-settle venue (`DeployCreVenue.s.sol`), a separate
 > evidence track — not the live markets.
 
+### Keeping the Chainlink marks fresh — `refresh-marks.sh`
+
+A Chainlink mark only refreshes when the CRE workflow runs (only the DON's KeystoneForwarder may write
+`onReport` — the engine cannot push it inline the way it pushes Stork). To keep ETH + LINK
+`chainlink-live` during a demo, run the re-push loop:
+
+```bash
+./refresh-marks.sh [interval_seconds]   # default 60; from packages/cre/; Ctrl-C to stop
+```
+
+It loops over `config.eth.json` / `config.link.json`, runs `cre workflow simulate --broadcast` for each,
+and restores `config.json` to the ETH default on exit. (Stork markets — BTC/XAU — don't need this; the
+engine pushes their marks inline before each checkpoint.) The production alternative is deploying the
+workflow to a live CRE DON so it auto-refreshes on its own cron.
+
 ## Capturing live-run evidence (do this before the demo)
 
 The chain of custody is proven in Foundry (`forge test --match-contract "MarkReceiver|CheckpointSettler"`),

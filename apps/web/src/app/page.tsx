@@ -1,9 +1,10 @@
-import { Dashboard } from "@/components/Dashboard.tsx";
+import { Landing } from "@/components/landing/Landing.tsx";
 
 /**
- * The dashboard route. A thin server-component shell around the client {@link Dashboard}, which owns
- * all live data (the engine WS/REST feed + the replay fallback) and the three.js hero.
+ * The marketing landing page (`/`). A brand surface that makes the agent-native perp thesis land and
+ * sends developers to the SDK / judges to the live `/dashboard` instrument panel. The bespoke
+ * three.js settlement-lattice hero is loaded client-side from inside {@link Landing}.
  */
 export default function Page() {
-  return <Dashboard />;
+  return <Landing />;
 }

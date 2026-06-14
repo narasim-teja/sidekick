@@ -50,3 +50,5 @@ sim-out/
 # CRE workflow build artifacts (cre compile → WASM)
 packages/cre/**/.cre_build_tmp.js
 packages/cre/**/*.wasm
+
+.claude

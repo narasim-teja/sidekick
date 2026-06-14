@@ -22,9 +22,9 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SideKick — Agent-Native Perp Venue",
+  title: "SideKick — The Perp Venue Built for Agents",
   description:
-    "Live observability for SideKick: per-block continuous funding, no liquidations, gas-free nanopayment settlement on Arc. The per-block loop, made visible.",
+    "Per-block continuous funding. No liquidations — your position decrements smoothly. Gas-free nanopayment settlement on Arc. The venue for agent-native strategies human perps make impossible.",
 };
 
 export const viewport: Viewport = {

@@ -1,14 +1,19 @@
-# @sidekick/web — observability dashboard (Phase 7)
+# @sidekick/web — landing + observability dashboard (Phase 7)
 
-The human-facing, **read-only** dashboard. It visualizes the per-block loop made visible —
-**not** a candlestick trading chart. Next.js 15 (App Router, static export) + Tailwind v4 +
-three.js, with a distinctive "mission-control" visual identity.
+The human-facing web app. Next.js 15 (App Router, static export) + Tailwind v4 + three.js,
+one "mission-control" visual identity across **two routes**:
 
-The hero is a **three.js settlement network**: a central pool node ringed by the live agent
-nodes, with every settlement event flying between them as a colored **packet** — the
+| Route | Surface | What it is |
+| --- | --- | --- |
+| `/` | **Landing** (marketing) | The agent-native perp thesis, the per-block loop explained, and the **SDK install** on-ramp (`@sidekick/sdk`, npm/pnpm/bun/yarn). A bespoke, self-running three.js **settlement-lattice** hero. CTA → `/dashboard`. |
+| `/dashboard` | **Dashboard** (read-only) | The per-block loop made visible — **not** a candlestick trading chart. The live instrument panel. |
+
+The dashboard hero is a **three.js settlement network**: a central pool node ringed by the
+live agent nodes, with every settlement event flying between them as a colored **packet** — the
 "thousands of sub-cent payments per block" claim made literal. Magenta packets are the x402
 Gateway **nanopayment** (the headline), amber is the funding stream, cyan is an in-checkpoint
-auto-settle.
+auto-settle. The landing's lattice hero is a separate, self-running dramatization of the same
+idea (`src/components/landing/LatticeHero.tsx`).
 
 ## Panels (Doc 2 §7.1)
 
@@ -45,12 +50,14 @@ server packages — the engine's payload types are mirrored locally in `src/lib/
 bun run engine          # packages/engine — the live per-block loop (REST :8787 + /ws)
 bun run demo            # packages/agents — drives the five demo agents (optional)
 
-# the dashboard:
+# the web app:
 cd apps/web
-bun run dev             # http://localhost:3000  (LIVE if the engine is up, else REPLAY)
+bun run dev             # http://localhost:3000        — the landing page
+                        # http://localhost:3000/dashboard — the instrument panel
 ```
 
-With no engine running, `bun run dev` still shows the full dashboard in **REPLAY** mode.
+With no engine running, `/dashboard` still shows the full panel in **REPLAY** mode. The landing
+page at `/` is fully static and needs no engine.
 
 ## Configuration (env)
 
